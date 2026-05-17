@@ -46,7 +46,10 @@ const Sidebar = () => {
     { name: 'Settings', path: '/settings', icon: <MdSettings size={22} />, roles: ['user', 'admin'] },
   ];
 
-  const filterByRole = (items) => items.filter(item => item.roles.includes(user?.role));
+  const filterByRole = (items) => {
+    const role = user?.role || 'user';
+    return items.filter(item => item.roles.includes(role));
+  };
 
   return (
     <div className="w-72 bg-gray-950 border-r border-gray-900 flex flex-col h-screen sticky top-0 overflow-y-auto scrollbar-hide">

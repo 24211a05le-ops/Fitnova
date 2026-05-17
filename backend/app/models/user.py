@@ -17,6 +17,7 @@ class User(db.Model):
     height = db.Column(db.Float, nullable=True) # cm
     weight = db.Column(db.Float, nullable=True) # kg
     fitness_goal = db.Column(db.String(100), nullable=True)
+    is_onboarded = db.Column(db.Boolean, default=False)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -48,5 +49,6 @@ class User(db.Model):
             "height": self.height,
             "weight": self.weight,
             "fitness_goal": self.fitness_goal,
+            "is_onboarded": self.is_onboarded,
             "created_at": self.created_at.isoformat() if self.created_at else None
         }

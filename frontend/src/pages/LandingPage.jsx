@@ -65,14 +65,6 @@ const LandingPage = () => {
             <Link to="/register" className="px-10 py-5 bg-green-500 text-black text-lg font-black rounded-2xl hover:bg-green-400 transition-all hover:scale-105 shadow-2xl shadow-green-500/20 flex items-center gap-3">
               Start Your Journey <MdArrowForward />
             </Link>
-            <div className="flex -space-x-3">
-              {[1, 2, 3, 4, 5].map(i => (
-                <div key={i} className="w-10 h-10 rounded-full border-4 border-black bg-gray-800"></div>
-              ))}
-              <div className="pl-6 text-sm font-bold text-gray-400">
-                Joined by <span className="text-white">12,000+</span> athletes
-              </div>
-            </div>
           </motion.div>
         </motion.div>
       </section>

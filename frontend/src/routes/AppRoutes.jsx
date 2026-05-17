@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 // Pages
@@ -39,6 +39,7 @@ const LoadingScreen = () => (
 // Reusable Protected Route Component
 export const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return <LoadingScreen />;
@@ -47,6 +48,14 @@ export const ProtectedRoute = ({ children, allowedRoles }) => {
   if (!user) {
     // Redirect unauthorized users to login
     return <Navigate to="/login" replace />;
+  }
+
+  // Onboarding Redirection Logic
+  if (!user.is_onboarded && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
+  }
+  if (user.is_onboarded && location.pathname === '/onboarding') {
+    return <Navigate to="/dashboard" replace />;
   }
 
   // Role verification (e.g. admin restricted views) - default to 'user' if not specified

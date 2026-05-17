@@ -153,10 +153,10 @@ const Login = () => {
             <button
               type="submit"
               disabled={isSubmitting || !isValid}
-              className={`w-full font-black py-4.5 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 text-sm uppercase tracking-widest ${
+              className={`w-full font-black py-4 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 text-sm uppercase tracking-wider ${
                 !isValid 
                   ? 'bg-gray-900 text-gray-600 cursor-not-allowed shadow-none' 
-                  : 'bg-green-500 hover:bg-green-400 text-black shadow-green-500/10'
+                  : 'bg-green-500 hover:bg-green-400 text-black shadow-green-500/25'
               }`}
             >
               {isSubmitting ? (

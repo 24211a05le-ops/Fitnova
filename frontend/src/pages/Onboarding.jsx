@@ -1,10 +1,27 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MdCheck, MdArrowForward, MdArrowBack, MdFitnessCenter, MdTrendingDown, MdFlashOn } from 'react-icons/md';
+import { useNavigate } from 'react-router-dom';
+import { submitOnboarding } from '../services/authService';
+import { useAuth } from '../context/AuthContext';
+import { Loader2, AlertCircle } from 'lucide-react';
 
 const Onboarding = () => {
   const [step, setStep] = useState(1);
   const totalSteps = 3;
+  const navigate = useNavigate();
+  const { user, setUser } = useAuth();
+  
+  const [formData, setFormData] = useState({
+    fitnessGoal: '',
+    weight: '',
+    targetWeight: '',
+    height: '',
+    age: '',
+    frequency: ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const steps = [
     {
@@ -12,9 +29,9 @@ const Onboarding = () => {
       title: "Identify Your Primary Goal",
       subtitle: "Fitnova tailors your experience based on your selection.",
       options: [
-        { title: 'Weight Loss', icon: <MdTrendingDown size={32} />, desc: 'Burn fat and improve lean muscle definition.' },
-        { title: 'Muscle Gain', icon: <MdFitnessCenter size={32} />, desc: 'Build strength and increase overall body mass.' },
-        { title: 'Peak Performance', icon: <MdFlashOn size={32} />, desc: 'Optimize stamina and athletic explosive power.' },
+        { title: 'Weight Loss', icon: <MdTrendingDown size={32} />, desc: 'Burn fat and improve lean muscle definition.', value: 'Weight Loss' },
+        { title: 'Muscle Gain', icon: <MdFitnessCenter size={32} />, desc: 'Build strength and increase overall body mass.', value: 'Muscle Gain' },
+        { title: 'Peak Performance', icon: <MdFlashOn size={32} />, desc: 'Optimize stamina and athletic explosive power.', value: 'Peak Performance' },
       ]
     },
     {
@@ -22,10 +39,10 @@ const Onboarding = () => {
       title: "Tell Us About Yourself",
       subtitle: "Precision tracking requires accurate baseline data.",
       inputs: [
-        { label: 'Current Weight (kg)', placeholder: '75', type: 'number' },
-        { label: 'Target Weight (kg)', placeholder: '82', type: 'number' },
-        { label: 'Height (cm)', placeholder: '180', type: 'number' },
-        { label: 'Age', placeholder: '24', type: 'number' },
+        { label: 'Current Weight (kg)', placeholder: '75', type: 'number', field: 'weight' },
+        { label: 'Target Weight (kg)', placeholder: '82', type: 'number', field: 'targetWeight' },
+        { label: 'Height (cm)', placeholder: '180', type: 'number', field: 'height' },
+        { label: 'Age', placeholder: '24', type: 'number', field: 'age' },
       ]
     },
     {
@@ -33,14 +50,39 @@ const Onboarding = () => {
       title: "Workout Frequency",
       subtitle: "How many sessions per week are you aiming for?",
       options: [
-        { title: '2-3 Days', icon: '⚡', desc: 'Maintain fitness and basic strength levels.' },
-        { title: '4-5 Days', icon: '🔥🔥', desc: 'Serious transformation and growth focus.' },
-        { title: '6-7 Days', icon: '🏆', desc: 'Elite athlete performance and discipline.' },
+        { title: '2-3 Days', icon: '⚡', desc: 'Maintain fitness and basic strength levels.', value: '2-3' },
+        { title: '4-5 Days', icon: '🔥🔥', desc: 'Serious transformation and growth focus.', value: '4-5' },
+        { title: '6-7 Days', icon: '🏆', desc: 'Elite athlete performance and discipline.', value: '6-7' },
       ]
     }
   ];
 
   const currentStep = steps[step - 1];
+
+  const handleChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleComplete = async () => {
+    setError('');
+    setIsSubmitting(true);
+    try {
+      const updatedUser = await submitOnboarding({
+        fitnessGoal: formData.fitnessGoal,
+        weight: formData.weight,
+        height: formData.height,
+        age: formData.age,
+        gender: user?.gender || 'Not Specified'
+      });
+      setUser(updatedUser);
+      localStorage.setItem('fitnova_user', JSON.stringify(updatedUser));
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.message || 'Failed to save onboarding data.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-6 selection:bg-green-500 selection:text-black">
@@ -65,6 +107,12 @@ const Onboarding = () => {
           ))}
         </div>
 
+        {error && (
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-400 text-sm font-medium">
+            <AlertCircle size={18} /> {error}
+          </div>
+        )}
+
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
@@ -80,18 +128,25 @@ const Onboarding = () => {
 
             {currentStep.options && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {currentStep.options.map((opt, i) => (
-                  <button key={i} className="group p-8 bg-black border border-gray-900 rounded-[32px] text-left hover:border-green-500 transition-all duration-300 relative overflow-hidden">
-                    <div className="absolute top-4 right-4 text-green-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <MdCheck size={24} />
-                    </div>
-                    <div className="w-14 h-14 bg-gray-950 rounded-2xl flex items-center justify-center text-gray-500 group-hover:bg-green-500 group-hover:text-black transition-all mb-6">
-                      {opt.icon}
-                    </div>
-                    <h3 className="text-xl font-bold text-white mb-2">{opt.title}</h3>
-                    <p className="text-xs text-gray-500 font-medium leading-relaxed">{opt.desc}</p>
-                  </button>
-                ))}
+                {currentStep.options.map((opt, i) => {
+                  const isSelected = step === 1 ? formData.fitnessGoal === opt.value : formData.frequency === opt.value;
+                  return (
+                    <button 
+                      key={i} 
+                      onClick={() => handleChange(step === 1 ? 'fitnessGoal' : 'frequency', opt.value)}
+                      className={`group p-8 border rounded-[32px] text-left transition-all duration-300 relative overflow-hidden ${isSelected ? 'bg-green-500/10 border-green-500' : 'bg-black border-gray-900 hover:border-green-500'}`}
+                    >
+                      <div className={`absolute top-4 right-4 transition-opacity ${isSelected ? 'opacity-100 text-green-500' : 'opacity-0 group-hover:opacity-100 text-green-500'}`}>
+                        <MdCheck size={24} />
+                      </div>
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all mb-6 ${isSelected ? 'bg-green-500 text-black' : 'bg-gray-950 text-gray-500 group-hover:bg-green-500 group-hover:text-black'}`}>
+                        {opt.icon}
+                      </div>
+                      <h3 className="text-xl font-bold text-white mb-2">{opt.title}</h3>
+                      <p className="text-xs text-gray-500 font-medium leading-relaxed">{opt.desc}</p>
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -103,6 +158,8 @@ const Onboarding = () => {
                     <input 
                       type={input.type} 
                       placeholder={input.placeholder}
+                      value={formData[input.field]}
+                      onChange={(e) => handleChange(input.field, e.target.value)}
                       className="w-full bg-black border border-gray-900 rounded-2xl py-5 px-8 text-white focus:outline-none focus:border-green-500 transition-all font-bold text-xl"
                     />
                   </div>
@@ -129,9 +186,12 @@ const Onboarding = () => {
             </button>
           ) : (
             <button 
-              className="px-10 py-5 bg-green-500 text-black text-sm font-black rounded-2xl hover:bg-green-400 transition-all shadow-xl shadow-green-500/20 flex items-center gap-3 uppercase tracking-widest"
+              onClick={handleComplete}
+              disabled={isSubmitting}
+              className="px-10 py-5 bg-green-500 text-black text-sm font-black rounded-2xl hover:bg-green-400 transition-all shadow-xl shadow-green-500/20 flex items-center gap-3 uppercase tracking-widest disabled:opacity-50"
             >
-              Complete Setup <MdCheck size={20} />
+              {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <MdCheck size={20} />}
+              Complete Setup
             </button>
           )}
         </div>

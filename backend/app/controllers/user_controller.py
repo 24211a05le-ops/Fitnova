@@ -70,6 +70,38 @@ def update_profile():
         db.session.rollback()
         return error_response(f"Could not update profile: {str(e)}", status_code=500)
 
+def submit_onboarding():
+    """Handles the initial onboarding data submission and flags user as onboarded"""
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            return error_response("User profile not found", status_code=404)
+
+        data = request.get_json()
+        if not data:
+            return error_response("Request payload is empty or not JSON", status_code=400)
+
+        if "age" in data:
+            user.age = int(data.get("age"))
+        if "gender" in data:
+            user.gender = data.get("gender")
+        if "height" in data:
+            user.height = float(data.get("height"))
+        if "weight" in data:
+            user.weight = float(data.get("weight"))
+        if "fitnessGoal" in data or "fitness_goal" in data:
+            user.fitness_goal = data.get("fitnessGoal") or data.get("fitness_goal")
+
+        user.is_onboarded = True
+
+        db.session.commit()
+        return api_response(success=True, message="Onboarding completed successfully", data=user.to_dict())
+
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f"Could not complete onboarding: {str(e)}", status_code=500)
+
 def delete_profile():
     """Safely removes the user profile and all associated logs from the database"""
     try:

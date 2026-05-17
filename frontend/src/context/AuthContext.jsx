@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { loginUser, registerUser } from '../services/authService';
+import { loginUser, registerUser, verifySession } from '../services/authService';
 
 const AuthContext = createContext();
 
@@ -9,19 +9,23 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const checkAuth = () => {
+    const checkAuth = async () => {
       try {
-        const storedUser = localStorage.getItem('fitnova_user');
         const token = localStorage.getItem('fitnova_token');
-        if (storedUser && token) {
-          setUser(JSON.parse(storedUser));
+        if (token) {
+          // Verify with backend
+          const data = await verifySession();
+          setUser(data.user);
+          localStorage.setItem('fitnova_user', JSON.stringify(data.user));
+        } else {
+          setUser(null);
         }
       } catch (err) {
         console.error('Error loading auth credentials:', err);
+        setUser(null);
         localStorage.removeItem('fitnova_user');
         localStorage.removeItem('fitnova_token');
       } finally {
-        // Smooth transition loader delay
         setTimeout(() => setLoading(false), 500);
       }
     };

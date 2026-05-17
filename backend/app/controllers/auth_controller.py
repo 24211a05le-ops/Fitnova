@@ -1,6 +1,6 @@
 import re
 from flask import request
-from flask_jwt_extended import create_access_token
+from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from app import db
 from app.models.user import User
 from app.utils.responses import api_response, error_response
@@ -57,9 +57,11 @@ def register_user():
 
         # Generate JWT Session Access Token
         access_token = create_access_token(identity=str(user.id))
+        refresh_token = create_refresh_token(identity=str(user.id))
 
         response_data = {
             "token": access_token,
+            "refresh_token": refresh_token,
             "user": user.to_dict()
         }
         return api_response(success=True, message="User profile registered successfully", data=response_data, status_code=21)
@@ -84,15 +86,38 @@ def login_user():
 
         # Generate JWT Session Access Token
         access_token = create_access_token(identity=str(user.id))
+        refresh_token = create_refresh_token(identity=str(user.id))
 
         response_data = {
             "token": access_token,
+            "refresh_token": refresh_token,
             "user": user.to_dict()
         }
         return api_response(success=True, message="Authentication successful", data=response_data)
 
     except Exception as e:
         return error_response(f"An unexpected error occurred during login: {str(e)}", status_code=500)
+
+def verify_session():
+    """Verifies the JWT token and returns current user data"""
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            return error_response("User profile not found", status_code=404)
+        
+        return api_response(success=True, message="Session valid", data={"user": user.to_dict()})
+    except Exception as e:
+        return error_response("Session invalid or expired", status_code=401)
+
+def refresh_session():
+    """Generates a new access token from a refresh token"""
+    try:
+        user_id = get_jwt_identity()
+        new_token = create_access_token(identity=str(user_id))
+        return api_response(success=True, message="Token refreshed", data={"token": new_token})
+    except Exception as e:
+        return error_response("Invalid refresh token", status_code=401)
 
 def logout_user():
     """Placeholder endpoint for invalidating session token"""
