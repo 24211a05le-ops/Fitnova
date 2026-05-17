@@ -64,7 +64,7 @@ def register_user():
             "refresh_token": refresh_token,
             "user": user.to_dict()
         }
-        return api_response(success=True, message="User profile registered successfully", data=response_data, status_code=21)
+        return api_response(success=True, message="User profile registered successfully", data=response_data, status_code=201)
 
     except Exception as e:
         db.session.rollback()
