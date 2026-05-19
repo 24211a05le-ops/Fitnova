@@ -1,22 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, Brain, Zap, MessageSquare, Send, Loader2, ArrowRight, ArrowLeft, TrendingUp, Award, ShieldCheck, Target, Dumbbell, Clock, Calendar, CheckCircle2, ChevronDown, Lightbulb } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkout } from '../context/WorkoutContext';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const MOCK_PLAN = {
-  "Weight Loss": [
-    { day: "Monday", focus: "Full Body HIIT", exercises: [{ name: "Burpees", sets: 3, reps: 15, rest: "30s" }, { name: "Kettlebell Swings", sets: 4, reps: 20, rest: "30s" }, { name: "Mountain Climbers", sets: 3, reps: 30, rest: "20s" }] },
-    { day: "Wednesday", focus: "Upper Body + Cardio", exercises: [{ name: "Push-Ups", sets: 4, reps: 15, rest: "30s" }, { name: "Dumbbell Rows", sets: 3, reps: 12, rest: "45s" }, { name: "Plank Hold", sets: 3, reps: "45s", rest: "20s" }] },
-    { day: "Friday", focus: "Lower Body Burn", exercises: [{ name: "Jump Squats", sets: 4, reps: 15, rest: "30s" }, { name: "Walking Lunges", sets: 3, reps: 20, rest: "30s" }, { name: "Calf Raises", sets: 4, reps: 20, rest: "20s" }] },
-  ],
-  "Muscle Gain": [
-    { day: "Monday", focus: "Chest & Triceps", exercises: [{ name: "Bench Press", sets: 4, reps: 10, rest: "90s" }, { name: "Incline DB Press", sets: 3, reps: 12, rest: "60s" }, { name: "Tricep Dips", sets: 3, reps: 12, rest: "60s" }] },
-    { day: "Wednesday", focus: "Back & Biceps", exercises: [{ name: "Deadlifts", sets: 4, reps: 8, rest: "120s" }, { name: "Pull-Ups", sets: 4, reps: 10, rest: "90s" }, { name: "Barbell Curls", sets: 3, reps: 12, rest: "45s" }] },
-    { day: "Friday", focus: "Legs & Shoulders", exercises: [{ name: "Squats", sets: 4, reps: 10, rest: "120s" }, { name: "Overhead Press", sets: 4, reps: 10, rest: "60s" }, { name: "Lateral Raises", sets: 3, reps: 15, rest: "45s" }] },
-  ]
-};
+import { sendAIChatMessage, getAIChatHistory, generateAIWorkout } from '../services/aiService';
 
 const AIRecommendations = () => {
   const { user } = useAuth();
@@ -36,32 +24,101 @@ const AIRecommendations = () => {
   ]);
   const [isTyping, setIsTyping] = useState(false);
 
-  const handleGenerate = () => {
+  // Fetch chat logs on load
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const history = await getAIChatHistory();
+        if (history && history.length > 0) {
+          const formatted = history.map(h => ({
+            sender: h.sender === 'user' ? 'user' : 'coach',
+            text: h.message,
+            time: new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }));
+          setMessages(formatted);
+        }
+      } catch (err) {
+        console.error("Could not load chat history:", err);
+      }
+    };
+    loadHistory();
+  }, []);
+
+  const handleGenerate = async () => {
     setGenStep(3);
-    setTimeout(() => {
-      const goal = genData.goal || 'Muscle Gain';
-      const plan = MOCK_PLAN[goal] || MOCK_PLAN['Muscle Gain'];
-      setGeneratedPlan({ goal, plan, rationale: goal === 'Weight Loss' ? 'This plan combines HIIT with compound movements to maximize caloric burn while preserving lean muscle. The circuit-style keeps heart rate elevated for sustained fat oxidation.' : 'Progressive overload targeting each major muscle group with 8-12 rep ranges in the hypertrophy sweet spot. Compound lifts build foundational strength while isolation work sculpts definition.', progression: 'Weeks 1-2: Learn form at moderate intensity. Weeks 3-4: Increase weights by 5-10%, add 1 extra set. Reduce rest periods by 10s for conditioning.' });
+    try {
+      const data = await generateAIWorkout({
+        fitness_goal: genData.goal || 'Muscle Gain',
+        workout_days: genData.daysPerWeek,
+        available_equipment: genData.equipment,
+        difficulty_level: genData.difficulty,
+        workout_duration: genData.timePerSession,
+        injuries_limitations: 'None'
+      });
+
+      const split = data.weekly_split || {};
+      const exMap = data.exercises || {};
+      const setsMap = data.sets || {};
+      const repsMap = data.reps || {};
+      const restMap = data.rest_time || {};
+
+      let planDays = [];
+      Object.keys(split).forEach(dayKey => {
+        const dayFocus = split[dayKey];
+        const dayExNames = exMap[dayKey] || [];
+        const dayExercises = dayExNames.map(exName => ({
+          name: exName,
+          sets: setsMap[exName] || 3,
+          reps: repsMap[exName] || 10,
+          rest: restMap[exName] || "60s"
+        }));
+        planDays.push({
+          day: dayKey,
+          focus: dayFocus,
+          exercises: dayExercises
+        });
+      });
+
+      setGeneratedPlan({
+        goal: data.goal,
+        plan: planDays,
+        rationale: `This customized program targets your goal of ${data.goal}. Cardio Recommendation: ${data.cardio_plan || 'N/A'}.`,
+        progression: data.progression_strategy
+      });
       setGenStep(4);
-    }, 2500);
+    } catch (err) {
+      console.error("AI workout generation failed:", err);
+      setGenStep(0);
+    }
   };
 
-  const handleChat = (e) => {
+  const handleChat = async (e) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
+
     const userMsg = { sender: 'user', text: chatInput, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
     setMessages(prev => [...prev, userMsg]);
-    const q = chatInput.toLowerCase();
+    const inputMsg = chatInput;
     setChatInput('');
     setIsTyping(true);
-    setTimeout(() => {
-      let reply = "Great question! Based on your training profile, I'd recommend maintaining consistency with your current routine while progressively increasing intensity each week.";
-      if (q.includes('diet') || q.includes('eat') || q.includes('calor')) reply = `For ${user?.fitness_goal || 'your goal'}, aim for a 40/35/25 protein-carb-fat split. Check the Diet Planner for personalized meal plans!`;
-      else if (q.includes('recovery') || q.includes('rest') || q.includes('sleep')) reply = "Recovery is crucial! Aim for 7-9 hours of sleep, stay hydrated, and consider active recovery on rest days. Your muscles grow during rest, not during training.";
-      else if (q.includes('hi') || q.includes('hello')) reply = `Hey ${user?.name || 'there'}! Ready to crush it? Ask me anything about training, nutrition, or recovery!`;
-      setMessages(prev => [...prev, { sender: 'coach', text: reply, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+
+    try {
+      const res = await sendAIChatMessage(inputMsg);
+      setMessages(prev => [...prev, {
+        sender: 'coach',
+        text: res.reply,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }]);
+    } catch (err) {
+      console.error("Chat communication failed:", err);
+      setMessages(prev => [...prev, {
+        sender: 'coach',
+        text: "I experienced a connection issue to the AI coach node. Please check your OpenRouter API Key configuration inside the backend .env!",
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }]);
+    } finally {
       setIsTyping(false);
-    }, 1200);
+    }
   };
 
   const loadPlanToWorkout = () => {
@@ -195,7 +252,7 @@ const AIRecommendations = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="text-[10px] font-black text-green-500 uppercase tracking-widest">Plan Generated</span>
-                      <h4 className="text-xl font-black text-white mt-1">{generatedPlan.goal === 'Weight Loss' ? 'Fat Burn Accelerator' : 'Hypertrophy Builder Pro'}</h4>
+                      <h4 className="text-xl font-black text-white mt-1">Personalized Workout Routine</h4>
                     </div>
                     <CheckCircle2 size={24} className="text-green-500" />
                   </div>
@@ -204,7 +261,7 @@ const AIRecommendations = () => {
                   <div className="p-4 bg-blue-500/5 border border-blue-500/10 rounded-2xl">
                     <div className="flex items-center gap-2 mb-2">
                       <Lightbulb size={14} className="text-blue-400" />
-                      <span className="text-xs font-bold text-blue-400">Why This Workout?</span>
+                      <span className="text-xs font-bold text-blue-400">Analysis & Strategy</span>
                     </div>
                     <p className="text-xs text-gray-400 leading-relaxed">{generatedPlan.rationale}</p>
                   </div>
@@ -216,10 +273,10 @@ const AIRecommendations = () => {
                         <button onClick={() => setExpandedDay(expandedDay === i ? null : i)}
                           className="w-full flex items-center justify-between p-4 hover:bg-white/[0.02] transition-all">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500 text-xs font-black">{day.day.substring(0, 2)}</div>
+                            <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500 text-xs font-black">{day.day.substring(0, 3)}</div>
                             <div className="text-left">
                               <p className="text-sm font-bold text-white">{day.focus}</p>
-                              <p className="text-[10px] text-gray-500">{day.exercises.length} exercises</p>
+                              <p className="text-[10px] text-gray-500">{day.exercises.length} Exercises Scheduled</p>
                             </div>
                           </div>
                           <ChevronDown size={16} className={`text-gray-600 transition-transform ${expandedDay === i ? 'rotate-180' : ''}`} />
@@ -235,7 +292,7 @@ const AIRecommendations = () => {
                                       <span className="w-6 h-6 rounded-md bg-gray-900 flex items-center justify-center text-[10px] font-bold text-gray-500">{j + 1}</span>
                                       <span className="text-sm font-bold text-white">{ex.name}</span>
                                     </div>
-                                    <span className="text-xs text-gray-500 font-mono">{ex.sets}x{ex.reps} • {ex.rest}</span>
+                                    <span className="text-xs text-gray-500 font-mono">{ex.sets} Sets x {ex.reps} Reps • {ex.rest} Rest</span>
                                   </div>
                                 ))}
                               </div>
@@ -250,7 +307,7 @@ const AIRecommendations = () => {
                   <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-2xl">
                     <div className="flex items-center gap-2 mb-2">
                       <TrendingUp size={14} className="text-green-400" />
-                      <span className="text-xs font-bold text-green-400">Suggested Progression</span>
+                      <span className="text-xs font-bold text-green-400">Progression Strategy</span>
                     </div>
                     <p className="text-xs text-gray-400 leading-relaxed">{generatedPlan.progression}</p>
                   </div>

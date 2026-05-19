@@ -10,7 +10,23 @@ export const getAIWorkoutPlans = async () => {
   return response.data.data;
 };
 
+export const sendAIChatMessage = async (message) => {
+  const response = await api.post('/ai/chat', { message });
+  return response.data.data;
+};
+
+export const getAIChatHistory = async () => {
+  const response = await api.get('/ai/chat-history');
+  return response.data.data;
+};
+
+export const searchExercisesSmart = async (query) => {
+  const response = await api.get(`/ai/exercise-search?query=${encodeURIComponent(query)}`);
+  return response.data.data;
+};
+
 export const getDashboardWidgets = async () => {
   const response = await api.get('/ai/dashboard-widgets');
   return response.data.data;
 };
+

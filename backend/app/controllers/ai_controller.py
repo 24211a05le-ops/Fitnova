@@ -236,3 +236,18 @@ def exercise_smart_search():
         return api_response(success=True, message=f"Found {len(sorted_results)} matching exercises", data={"results": sorted_results})
     except Exception as e:
         return error_response(f"Exercise search failed: {str(e)}", status_code=500)
+
+def get_dashboard_widgets():
+    try:
+        data = {
+            "calories_burned": {"today": 487, "goal": 600, "week_total": 3240},
+            "workout_streak": {"current": 5, "best": 12, "unit": "days"},
+            "weekly_consistency": {"completed": 4, "planned": 5, "percentage": 80},
+            "goal_progress": {"current": 68, "target": 100, "label": "On Track"},
+            "recovery_status": {"score": 84, "label": "Fully Recovered", "color": "green"},
+            "muscle_groups_trained": ["Chest", "Back", "Shoulders", "Core"]
+        }
+        return api_response(success=True, message="Dashboard widgets", data=data)
+    except Exception as e:
+        return error_response(f"Error: {str(e)}", status_code=500)
+

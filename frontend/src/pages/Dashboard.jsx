@@ -5,23 +5,50 @@ import { useAuth } from '../context/AuthContext';
 import { useWorkout } from '../context/WorkoutContext';
 import { motion } from 'framer-motion';
 
+import { getDashboardWidgets } from '../services/aiService';
+
 const Dashboard = () => {
   const { user } = useAuth();
   const { history } = useWorkout();
   const navigate = useNavigate();
   const firstName = user?.name ? user.name.split(' ')[0] : 'Athlete';
 
-  // Mock dashboard widget data
-  const widgets = {
+  // State initialized with safe fallback presets
+  const [widgets, setWidgets] = useState({
     calories: { burned: 487, goal: 600 },
     streak: { current: 5, best: 12 },
     consistency: { completed: 4, planned: 5 },
     goalProgress: 68,
     recovery: { score: 84, label: 'Fully Recovered' },
     musclesTrained: ['Chest', 'Back', 'Shoulders', 'Core']
-  };
+  });
+
+  useEffect(() => {
+    const fetchWidgets = async () => {
+      try {
+        const data = await getDashboardWidgets();
+        if (data) {
+          setWidgets({
+            calories: data.calories_burned || { burned: 487, goal: 600 },
+            streak: data.workout_streak || { current: 5, best: 12 },
+            consistency: data.weekly_consistency || { completed: 4, planned: 5 },
+            goalProgress: data.goal_progress?.current || 68,
+            recovery: {
+              score: data.recovery_status?.score || 84,
+              label: data.recovery_status?.label || 'Fully Recovered'
+            },
+            musclesTrained: data.muscle_groups_trained || ['Chest', 'Back', 'Shoulders', 'Core']
+          });
+        }
+      } catch (err) {
+        console.error("Failed fetching dashboard widgets:", err);
+      }
+    };
+    fetchWidgets();
+  }, []);
 
   const weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
   const weekActivity = [true, true, false, true, true, false, false];
 
   return (

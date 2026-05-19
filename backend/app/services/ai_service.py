@@ -98,49 +98,63 @@ class AIService:
 
     @staticmethod
     def _get_mock_response(prompt, response_format):
-        """Standard mock fallback responses structured as correct JSON to bypass actual network downtime or missing api keys"""
+        """Standard mock fallback responses structured to match format requests"""
         prompt_lower = prompt.lower()
-        if "workout" in prompt_lower or "split" in prompt_lower:
-            return json.dumps({
-                "weekly_split": {
-                    "Monday": "Upper Body Strength",
-                    "Wednesday": "Lower Body Strength",
-                    "Friday": "Full Body Conditioning"
-                },
-                "exercises": [
-                    {"name": "Bench Press", "sets": 4, "reps": 10, "rest_time": "90s"},
-                    {"name": "Squats", "sets": 4, "reps": 10, "rest_time": "120s"},
-                    {"name": "Dumbbell Rows", "sets": 3, "reps": 12, "rest_time": "60s"}
-                ],
-                "progression_strategy": "Increase weight by 2.5kg once all planned sets are completed with perfect form.",
-                "cardio_plan": "15 minutes of low-intensity steady-state cardio post-workout."
-            })
-        elif "meal" in prompt_lower or "diet" in prompt_lower:
-            return json.dumps({
-                "breakfast": "Oatmeal with protein powder and mixed berries.",
-                "lunch": "Grilled chicken breast with brown rice and broccoli.",
-                "dinner": "Baked salmon with sweet potatoes and green beans.",
-                "snacks": "Greek yogurt with a handful of almonds.",
-                "macros": {"proteins": "160g", "carbs": "200g", "fats": "65g"},
-                "meal_timing": "Eat meals spaced 3-4 hours apart, finishing dinner at least 2 hours before bed."
-            })
-        elif "recovery" in prompt_lower or "soreness" in prompt_lower:
-            return json.dumps({
-                "recovery_advice": "Focus on passive stretching and progressive foam rolling to release tension. Ensure optimal hydration.",
-                "suggested_workout_today": "Active recovery: 30 minutes of walking or gentle mobility flows.",
-                "hydration_suggestions": "Drink 3.5 liters of water today. Add electrolytes if workout intensity was high.",
-                "rest_recommendation": "Go to sleep 30 minutes earlier tonight. Keep room temperature cool."
-            })
-        elif "onboarding" in prompt_lower or "maintenance" in prompt_lower:
-            return json.dumps({
-                "fitness_profile_summary": "User is focused on optimal transformation, presenting clean schedules and moderate equipment access.",
-                "recommended_training_style": "Resistance training combined with active recovery blocks.",
-                "calorie_recommendation": 2400,
-                "beginner_intermediate_classification": "Intermediate",
-                "estimated_maintenance_calories": 2600
-            })
+        
+        # If the caller requested structured JSON
+        if response_format and response_format.get("type") == "json_object":
+            if "workout" in prompt_lower or "split" in prompt_lower:
+                return json.dumps({
+                    "weekly_split": {
+                        "Monday": "Upper Body Strength",
+                        "Wednesday": "Lower Body Strength",
+                        "Friday": "Full Body Conditioning"
+                    },
+                    "exercises": [
+                        {"name": "Bench Press", "sets": 4, "reps": 10, "rest_time": "90s"},
+                        {"name": "Squats", "sets": 4, "reps": 10, "rest_time": "120s"},
+                        {"name": "Dumbbell Rows", "sets": 3, "reps": 12, "rest_time": "60s"}
+                    ],
+                    "progression_strategy": "Increase weight by 2.5kg once all planned sets are completed with perfect form.",
+                    "cardio_plan": "15 minutes of low-intensity steady-state cardio post-workout."
+                })
+            elif "meal" in prompt_lower or "diet" in prompt_lower:
+                return json.dumps({
+                    "breakfast": "Oatmeal with protein powder and mixed berries.",
+                    "lunch": "Grilled chicken breast with brown rice and broccoli.",
+                    "dinner": "Baked salmon with sweet potatoes and green beans.",
+                    "snacks": "Greek yogurt with a handful of almonds.",
+                    "macros": {"proteins": "160g", "carbs": "200g", "fats": "65g"},
+                    "meal_timing": "Eat meals spaced 3-4 hours apart, finishing dinner at least 2 hours before bed."
+                })
+            elif "recovery" in prompt_lower or "soreness" in prompt_lower:
+                return json.dumps({
+                    "recovery_advice": "Focus on passive stretching and progressive foam rolling to release tension. Ensure optimal hydration.",
+                    "suggested_workout_today": "Active recovery: 30 minutes of walking or gentle mobility flows.",
+                    "hydration_suggestions": "Drink 3.5 liters of water today. Add electrolytes if workout intensity was high.",
+                    "rest_recommendation": "Go to sleep 30 minutes earlier tonight. Keep room temperature cool."
+                })
+            elif "onboarding" in prompt_lower or "maintenance" in prompt_lower:
+                return json.dumps({
+                    "fitness_profile_summary": "User is focused on optimal transformation, presenting clean schedules and moderate equipment access.",
+                    "recommended_training_style": "Resistance training combined with active recovery blocks.",
+                    "calorie_recommendation": 2400,
+                    "beginner_intermediate_classification": "Intermediate",
+                    "estimated_maintenance_calories": 2600
+                })
+            else:
+                return json.dumps({
+                    "advice": "Focus on consistency, progressive overload, and active recovery blocks for optimal progression!"
+                })
+        
+        # Default: Return clean Markdown for chat bubbles
         else:
-            return "Based on your fitness level and training metrics, focus on consistency, progressive overload, and active recovery blocks for optimal progression!"
+            if "workout" in prompt_lower or "split" in prompt_lower:
+                return "Here is a high-level recommendation for your workout split:\n\n* **Monday (Push)**: Focus on Chest, Shoulders, and Triceps.\n* **Wednesday (Pull)**: Focus on Back and Biceps.\n* **Friday (Legs)**: Focus on Quads, Hamstrings, and Calves.\n\nFocus on progressive overload by slowly increasing reps or load week-over-week!"
+            elif "meal" in prompt_lower or "diet" in prompt_lower:
+                return "To optimize your diet progress, try keeping these guidelines in mind:\n\n1. **Protein Target**: Target 1.8-2.2g of protein per kg of bodyweight.\n2. **Clean Sources**: Focus on high-quality proteins (chicken, fish, eggs, tofu) and complex carbs (oats, brown rice).\n3. **Hydration**: Drink 3-4 liters of water to support metabolism and muscle recovery!"
+            else:
+                return "Welcome! As your professional fitness intelligence coach, I'm here to guide you. Focus on maintaining a consistent training split, staying hydrated, prioritizing compound lifts, and sleeping 7-8 hours for optimal progressive overload!"
 
     # ====================================================
     # PROMPT TEMPLATES & DOMAIN CALLS

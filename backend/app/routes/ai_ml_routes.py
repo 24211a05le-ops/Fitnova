@@ -5,7 +5,7 @@ from flask_jwt_extended import jwt_required
 from app.controllers.ai_controller import (
     generate_workout, get_workout_plans, chat, get_chat_history,
     recovery_suggestions, onboarding_analyzer, diet_planner, get_meal_plans,
-    exercise_smart_search
+    exercise_smart_search, get_dashboard_widgets
 )
 
 # Import ML endpoints
@@ -33,6 +33,8 @@ ai_ml_bp.route('/ai/onboarding-analyzer', methods=['GET'])(jwt_required()(onboar
 ai_ml_bp.route('/ai/diet-planner', methods=['POST'])(jwt_required()(diet_planner))
 ai_ml_bp.route('/ai/meal-plans', methods=['GET'])(jwt_required()(get_meal_plans))
 ai_ml_bp.route('/ai/exercise-search', methods=['GET'])(jwt_required()(exercise_smart_search))
+ai_ml_bp.route('/ai/dashboard-widgets', methods=['GET'])(jwt_required()(get_dashboard_widgets))
+
 
 # ====================================================
 # PART 2 — ML ROUTES
