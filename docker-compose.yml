@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=e98e4705e5e500093afac537b532ef18c5e193655d4ffce42bfffdb5530fb908
+      - JWT_SECRET_KEY=fdbc3d5323ed74bb06344ab3e2b875103878e133f90033db884356b941f92573d
+      - DATABASE_URL=postgresql+psycopg2://neondb_owner:npg_mOzuHvSi10pZ@ep-spring-paper-aofjn3vq-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: always

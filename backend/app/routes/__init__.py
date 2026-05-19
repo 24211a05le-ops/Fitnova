@@ -8,6 +8,7 @@ from app.routes.diet_routes import diet_bp
 from app.routes.test_routes import test_bp
 from app.routes.weight_routes import weight_bp
 from app.routes.ai_routes import ai_bp
+from app.routes.ai_ml_routes import ai_ml_bp
 
 # Expose all blueprints as a single collection for unified registration
 all_blueprints = [
@@ -20,5 +21,6 @@ all_blueprints = [
     diet_bp,
     test_bp,
     weight_bp,
-    ai_bp
+    ai_bp,
+    ai_ml_bp
 ]
