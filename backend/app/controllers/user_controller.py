@@ -2,6 +2,7 @@ from flask import request
 from flask_jwt_extended import get_jwt_identity
 from app import db
 from app.models.user import User
+from app.models.fitness_profile import FitnessProfile
 from app.utils.responses import api_response, error_response
 
 def get_profile():
@@ -71,7 +72,8 @@ def update_profile():
         return error_response(f"Could not update profile: {str(e)}", status_code=500)
 
 def submit_onboarding():
-    """Handles the initial onboarding data submission and flags user as onboarded"""
+    """Handles the initial onboarding data submission and flags user as onboarded.
+    Now saves detailed fitness profile data for AI-ready personalization."""
     try:
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
@@ -82,16 +84,22 @@ def submit_onboarding():
         if not data:
             return error_response("Request payload is empty or not JSON", status_code=400)
 
-        if "age" in data:
-            user.age = int(data.get("age"))
-        if "gender" in data:
-            user.gender = data.get("gender")
-        if "height" in data:
-            user.height = float(data.get("height"))
-        if "weight" in data:
-            user.weight = float(data.get("weight"))
+        # Update user-level fitness goal if provided
         if "fitnessGoal" in data or "fitness_goal" in data:
             user.fitness_goal = data.get("fitnessGoal") or data.get("fitness_goal")
+
+        # Create or update fitness profile with onboarding data
+        profile = FitnessProfile.query.filter_by(user_id=user.id).first()
+        if not profile:
+            profile = FitnessProfile(user_id=user.id)
+            db.session.add(profile)
+
+        profile.fitness_goal = data.get("fitnessGoal") or data.get("fitness_goal") or profile.fitness_goal
+        profile.experience_level = data.get("experienceLevel") or data.get("experience_level") or profile.experience_level
+        profile.workout_preference = data.get("workoutPreference") or data.get("workout_preference") or profile.workout_preference
+        profile.available_days = data.get("availableDays") or data.get("available_days") or profile.available_days
+        profile.equipment_access = data.get("equipmentAccess") or data.get("equipment_access") or profile.equipment_access
+        profile.injuries = data.get("injuries") or profile.injuries
 
         user.is_onboarded = True
 

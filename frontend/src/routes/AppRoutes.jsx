@@ -37,7 +37,7 @@ const LoadingScreen = () => (
 );
 
 // Reusable Protected Route Component
-export const ProtectedRoute = ({ children, allowedRoles }) => {
+export const ProtectedRoute = ({ children, allowedRoles, withLayout = true }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
 
@@ -65,7 +65,7 @@ export const ProtectedRoute = ({ children, allowedRoles }) => {
   }
 
   // Wrap in global layout with responsive navbar/sidebar
-  return <Layout>{children}</Layout>;
+  return withLayout ? <Layout>{children}</Layout> : children;
 };
 
 // Reusable Public Route Component (redirects to dashboard if already authenticated)
@@ -111,7 +111,7 @@ const AppRoutes = () => {
       <Route 
         path="/onboarding" 
         element={
-          <ProtectedRoute>
+          <ProtectedRoute withLayout={false}>
             <Onboarding />
           </ProtectedRoute>
         } 

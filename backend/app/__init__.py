@@ -37,8 +37,13 @@ def create_app(config_name=None):
     print(f"\n[Fitnova Diagnostics] Booting in '{env_name}' mode")
     print(f"[Neon DB] Active Database URI: {flask_app.config.get('SQLALCHEMY_DATABASE_URI')}")
 
-    # 2. Configure CORS
-    CORS(flask_app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+    # 2. Configure CORS - explicitly list allowed origins when supports_credentials is True
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://fitnova-fitness.vercel.app"
+    ]
+    CORS(flask_app, resources={r"/api/*": {"origins": allowed_origins}}, supports_credentials=True)
 
     # 3. Initialize Extensions on app
     db.init_app(flask_app)

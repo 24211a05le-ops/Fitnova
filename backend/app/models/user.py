@@ -25,6 +25,9 @@ class User(db.Model):
     workouts = db.relationship('Workout', backref='user', lazy=True, cascade="all, delete-orphan")
     progress_logs = db.relationship('ProgressLog', backref='user', lazy=True, cascade="all, delete-orphan")
     diet_plans = db.relationship('DietPlan', backref='user', lazy=True, cascade="all, delete-orphan")
+    fitness_profile = db.relationship('FitnessProfile', backref='user', uselist=False, lazy=True, cascade="all, delete-orphan")
+    weight_logs = db.relationship('WeightLog', backref='user', lazy=True, cascade="all, delete-orphan")
+    ai_workout_plans = db.relationship('AIWorkoutPlan', backref='user', lazy=True, cascade="all, delete-orphan")
 
     def set_password(self, password):
         """Hashes password with bcrypt and sets password_hash"""
@@ -40,7 +43,7 @@ class User(db.Model):
 
     def to_dict(self):
         """Converts user instance into a clean python dict structure"""
-        return {
+        result = {
             "id": self.id,
             "name": self.name,
             "email": self.email,
@@ -52,3 +55,7 @@ class User(db.Model):
             "is_onboarded": self.is_onboarded,
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
+        # Include fitness profile if exists
+        if self.fitness_profile:
+            result["fitness_profile"] = self.fitness_profile.to_dict()
+        return result
