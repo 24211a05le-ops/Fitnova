@@ -59,7 +59,7 @@ def generate_workout():
             duration_weeks=4,
             sessions_per_week=days,
             equipment_needed=equipment,
-            plan_data=json.dumps(plan.get("weekly_split", {})),
+            plan_data=json.dumps(plan),
             rationale=plan.get("progression_strategy", "Focus on progression overload."),
             progression_notes=plan.get("cardio_plan", "Incorporate cardio cycles.")
         )
@@ -218,11 +218,15 @@ def exercise_smart_search():
         for e in all_embeddings:
             # Direct match or semantic tag contains
             match_score = 0
-            if q in e.exercise_name.lower():
+            name_lower = (e.exercise_name or "").lower()
+            muscle_lower = (e.muscle_group or "").lower()
+            tags_str = e.tags or ""
+            
+            if q in name_lower:
                 match_score += 10
-            if q in e.muscle_group.lower():
+            if q in muscle_lower:
                 match_score += 5
-            for tag in e.tags.split(","):
+            for tag in tags_str.split(","):
                 if q in tag.strip().lower():
                     match_score += 3
             

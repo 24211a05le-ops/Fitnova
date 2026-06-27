@@ -4,19 +4,19 @@ import time
 import requests
 from flask import current_app
 
-PRIMARY_MODEL = "deepseek/deepseek-chat-v3-0324:free"
-SECONDARY_MODEL = "meta-llama/llama-3-8b-instruct:free"
-FALLBACK_MODEL = "mistralai/mistral-7b-instruct:free"
+PRIMARY_MODEL = "gemini-2.5-flash"
+SECONDARY_MODEL = "gemini-2.0-flash"
+FALLBACK_MODEL = "gemini-1.5-flash"
 
 # In-memory caching for prompt outputs
 _ai_cache = {}
 
 class AIService:
-    """Production-ready OpenRouter AI Orchestrator with retries, model fallback, token tracking, and caching."""
+    """Production-ready Google Gemini AI Orchestrator with direct REST queries, caching, and mock fallbacks."""
 
     @staticmethod
     def _get_api_key():
-        return os.getenv("OPENROUTER_API_KEY", "")
+        return os.getenv("GEMINI_API_KEY", "")
 
     @staticmethod
     def call_model(prompt, system_instruction="You are a senior fitness and AI personal coach for Fitnova.", response_format=None, custom_model=None):
@@ -29,60 +29,55 @@ class AIService:
         if cache_key in _ai_cache:
             return _ai_cache[cache_key]
 
-        models_to_try = [PRIMARY_MODEL, SECONDARY_MODEL, FALLBACK_MODEL]
+        models_to_try = [PRIMARY_MODEL, SECONDARY_MODEL, FALLBACK_MODEL, "gemini-flash-latest"]
         if custom_model:
             models_to_try.insert(0, custom_model)
 
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://fitnova.fitness",
-            "X-Title": "Fitnova Gym Progress Intelligence System"
-        }
-
         for model in models_to_try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            
+            # Direct Gemini payload format
+            full_prompt = prompt
+            if system_instruction:
+                full_prompt = f"System Instruction: {system_instruction}\n\nUser Message: {prompt}"
+                
             payload = {
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_instruction},
-                    {"role": "user", "content": prompt}
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": full_prompt}
+                        ]
+                    }
                 ]
             }
-            if response_format:
-                payload["response_format"] = response_format
+            
+            # Force JSON response output format if requested
+            if response_format and response_format.get("type") == "json_object":
+                payload["generationConfig"] = {
+                    "responseMimeType": "application/json"
+                }
 
-            # Retry Mechanism with Exponential Backoff
-            retries = 3
-            backoff = 1.0
+            retries = 2
             for attempt in range(retries):
                 try:
                     response = requests.post(
-                        "https://openrouter.ai/api/v1/chat/completions",
-                        headers=headers,
+                        url,
+                        headers={"Content-Type": "application/json"},
                         json=payload,
-                        timeout=30
+                        timeout=15
                     )
                     if response.status_code == 200:
                         res_json = response.json()
-                        text_content = res_json["choices"][0]["message"]["content"]
+                        text_content = res_json["candidates"][0]["content"]["parts"][0]["text"]
                         
                         # Cache the result
                         _ai_cache[cache_key] = text_content
-                        
-                        # Log token usage
-                        usage = res_json.get("usage", {})
-                        AIService._track_token_usage(model, usage)
-
                         return text_content
-                    elif response.status_code == 429: # Rate limit
-                        time.sleep(backoff)
-                        backoff *= 2
                     else:
+                        print(f"[Gemini Service] Model {model} returned status {response.status_code}: {response.text}")
                         break # Try next model
                 except Exception as e:
-                    print(f"[AI Service] Error calling model {model} on attempt {attempt}: {str(e)}")
-                    time.sleep(backoff)
-                    backoff *= 2
+                    print(f"[Gemini Service] Error calling model {model} on attempt {attempt}: {str(e)}")
 
         # If all API calls fail, fallback to mock
         return AIService._get_mock_response(prompt, response_format)
@@ -160,6 +155,19 @@ class AIService:
     # PROMPT TEMPLATES & DOMAIN CALLS
     # ====================================================
 
+    @staticmethod
+    def _clean_json_text(text):
+        if not text:
+            return ""
+        text = text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        elif text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        return text.strip()
+
     @classmethod
     def generate_workout_plan(cls, goal, days, equipment, level, duration, injuries):
         prompt = f"""
@@ -181,13 +189,13 @@ class AIService:
         """
         response_text = cls.call_model(prompt, response_format={"type": "json_object"})
         try:
-            return json.loads(response_text)
+            return json.loads(cls._clean_json_text(response_text))
         except Exception:
-            return json.loads(cls._get_mock_response("workout", None))
+            return json.loads(cls._get_mock_response("workout", {"type": "json_object"}))
 
     @classmethod
     def generate_fitness_chat(cls, user_message, chat_history_context=None, recent_workout_context=None):
-        system_instruction = "You are a professional full-stack fitness intelligence coach. Use concise, actionable, and science-backed markdown formatting."
+        system_instruction = "You are a professional fitness coach. Respond in a highly direct, simple, and accurate manner. Keep your response extremely to the point, short (maximum 2-3 brief paragraphs or short bullet points), and avoid lengthy explanations."
         context_prompt = ""
         if chat_history_context:
             context_prompt += f"Recent Chat context:\n{chat_history_context}\n"
@@ -215,9 +223,9 @@ class AIService:
         """
         response_text = cls.call_model(prompt, response_format={"type": "json_object"})
         try:
-            return json.loads(response_text)
+            return json.loads(cls._clean_json_text(response_text))
         except Exception:
-            return json.loads(cls._get_mock_response("recovery", None))
+            return json.loads(cls._get_mock_response("recovery", {"type": "json_object"}))
 
     @classmethod
     def analyze_onboarding(cls, onboarding_data):
@@ -234,9 +242,9 @@ class AIService:
         """
         response_text = cls.call_model(prompt, response_format={"type": "json_object"}, custom_model=SECONDARY_MODEL)
         try:
-            return json.loads(response_text)
+            return json.loads(cls._clean_json_text(response_text))
         except Exception:
-            return json.loads(cls._get_mock_response("onboarding", None))
+            return json.loads(cls._get_mock_response("onboarding", {"type": "json_object"}))
 
     @classmethod
     def generate_meal_plan(cls, calories, diet_type, budget, meals_per_day, allergies, indian_preference):
@@ -259,6 +267,6 @@ class AIService:
         """
         response_text = cls.call_model(prompt, response_format={"type": "json_object"})
         try:
-            return json.loads(response_text)
+            return json.loads(cls._clean_json_text(response_text))
         except Exception:
-            return json.loads(cls._get_mock_response("meal", None))
+            return json.loads(cls._get_mock_response("meal", {"type": "json_object"}))
