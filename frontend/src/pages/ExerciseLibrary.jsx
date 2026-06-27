@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, Dumbbell, Star, TrendingUp, ChevronRight, Sparkles, Play, Info, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Search, Filter, Dumbbell, Star, TrendingUp, ChevronRight, Sparkles, Play, Info, X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { searchExercisesSmart } from '../services/aiService';
+
 
 const EXERCISES = [
   // Chest
@@ -55,13 +57,20 @@ const diffColor = { Beginner: 'text-green-400 bg-green-500/10', Intermediate: 't
 const muscleEmoji = { Chest: '💪', Back: '🔙', Legs: '🦵', Shoulders: '🏋️', Arms: '💪', Core: '🎯' };
 
 const ExerciseLibrary = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeCategory, setActiveCategory] = useState('All');
   const [difficulty, setDifficulty] = useState('All Levels');
   const [location, setLocation] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [selectedExercise, setSelectedExercise] = useState(null);
   const [backendExercises, setBackendExercises] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+
+  // Sync URL search params to local searchQuery state
+  useEffect(() => {
+    const q = searchParams.get('search') || '';
+    setSearchQuery(q);
+  }, [searchParams]);
 
   // Debounced semantic tags backend search
   useEffect(() => {
@@ -73,7 +82,8 @@ const ExerciseLibrary = () => {
       setIsSearching(true);
       try {
         const results = await searchExercisesSmart(searchQuery);
-        const formatted = results.map(r => ({
+        const list = results.results || [];
+        const formatted = list.map(r => ({
           name: r.exercise_name,
           muscle: r.muscle_group,
           difficulty: r.difficulty || 'Beginner',
@@ -92,18 +102,38 @@ const ExerciseLibrary = () => {
   }, [searchQuery]);
 
   const filtered = useMemo(() => {
-    // If backend returns smart search results, show them!
-    if (searchQuery.trim() && backendExercises.length > 0) {
-      return backendExercises;
-    }
-    // Otherwise fallback to local static catalog filtering
-    return EXERCISES.filter(ex => {
+    // Get local filtered exercises
+    const localFiltered = EXERCISES.filter(ex => {
       if (activeCategory !== 'All' && ex.muscle !== activeCategory) return false;
       if (difficulty !== 'All Levels' && ex.difficulty !== difficulty) return false;
       if (location !== 'All' && ex.equipment !== location) return false;
-      if (searchQuery && !ex.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      
+      // If there is a searchQuery, check if matches name or muscle group
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesName = ex.name.toLowerCase().includes(q);
+        const matchesMuscle = ex.muscle.toLowerCase().includes(q);
+        return matchesName || matchesMuscle;
+      }
       return true;
     });
+
+    if (!searchQuery.trim()) {
+      return localFiltered;
+    }
+
+    // Combine local results with smart backend search results
+    const combined = [...backendExercises];
+    
+    // Add local ones that are not already present in backend list (by name case-insensitive)
+    localFiltered.forEach(localEx => {
+      const alreadyPresent = combined.some(c => c.name.toLowerCase() === localEx.name.toLowerCase());
+      if (!alreadyPresent) {
+        combined.push(localEx);
+      }
+    });
+
+    return combined;
   }, [activeCategory, difficulty, location, searchQuery, backendExercises]);
 
   const popular = EXERCISES.filter(e => e.popular);

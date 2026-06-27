@@ -28,9 +28,10 @@ const AIRecommendations = () => {
   useEffect(() => {
     const loadHistory = async () => {
       try {
-        const history = await getAIChatHistory();
-        if (history && history.length > 0) {
-          const formatted = history.map(h => ({
+        const res = await getAIChatHistory();
+        const list = res.history || [];
+        if (list.length > 0) {
+          const formatted = list.map(h => ({
             sender: h.sender === 'user' ? 'user' : 'coach',
             text: h.message,
             time: new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -42,6 +43,73 @@ const AIRecommendations = () => {
       }
     };
     loadHistory();
+  }, []);
+
+  // Fetch and hydrate latest generated workout plan on mount
+  useEffect(() => {
+    const loadSavedPlan = async () => {
+      try {
+        const res = await getAIWorkoutPlans();
+        const list = res.plans || [];
+        if (list.length > 0) {
+          const data = list[0]; // get the latest saved plan
+          
+          const planSource = data.plan_data && data.plan_data.weekly_split ? data.plan_data : data;
+          const split = planSource.weekly_split || {};
+          let planDays = [];
+
+          if (Array.isArray(planSource.exercises)) {
+            const exercises = planSource.exercises;
+            const dayKeys = Object.keys(split);
+            dayKeys.forEach((dayKey, idx) => {
+              const dayFocus = split[dayKey];
+              const exercisesPerDay = Math.ceil(exercises.length / dayKeys.length);
+              const startIdx = idx * exercisesPerDay;
+              const endIdx = startIdx + exercisesPerDay;
+              const dayExercises = exercises.slice(startIdx, endIdx).map(ex => ({
+                name: ex.name || ex.exercise_name || "Exercise",
+                sets: ex.sets || 3,
+                reps: ex.reps || 10,
+                rest: ex.rest_time || ex.rest || "60s"
+              }));
+              planDays.push({ day: dayKey, focus: dayFocus, exercises: dayExercises });
+            });
+          } else {
+            const exMap = planSource.exercises || {};
+            const setsMap = planSource.sets || {};
+            const repsMap = planSource.reps || {};
+            const restMap = planSource.rest_time || {};
+
+            Object.keys(split).forEach(dayKey => {
+              const dayFocus = split[dayKey];
+              const dayExNames = exMap[dayKey] || [];
+              const dayExercises = dayExNames.map(exName => ({
+                name: exName,
+                sets: setsMap[exName] || 3,
+                reps: repsMap[exName] || 10,
+                rest: restMap[exName] || "60s"
+              }));
+              planDays.push({ day: dayKey, focus: dayFocus, exercises: dayExercises });
+            });
+          }
+
+          const rationaleText = data.rationale || planSource.progression_strategy || "Focus on progressive overload.";
+          const cardioText = data.progression_notes || planSource.cardio_plan || "N/A";
+          const goalText = data.goal || planSource.goal || "General Fitness";
+
+          setGeneratedPlan({
+            goal: goalText,
+            plan: planDays,
+            rationale: `This customized program targets your goal of ${goalText}. Cardio Recommendation: ${cardioText}.`,
+            progression: rationaleText
+          });
+          setGenStep(4); // Land directly on step 4 to display loaded plan!
+        }
+      } catch (err) {
+        console.error("Could not load saved workout plan:", err);
+      }
+    };
+    loadSavedPlan();
   }, []);
 
   const handleGenerate = async () => {
@@ -56,34 +124,68 @@ const AIRecommendations = () => {
         injuries_limitations: 'None'
       });
 
-      const split = data.weekly_split || {};
-      const exMap = data.exercises || {};
-      const setsMap = data.sets || {};
-      const repsMap = data.reps || {};
-      const restMap = data.rest_time || {};
-
+      const planSource = data.plan_data && data.plan_data.weekly_split ? data.plan_data : data;
+      const split = planSource.weekly_split || {};
       let planDays = [];
-      Object.keys(split).forEach(dayKey => {
-        const dayFocus = split[dayKey];
-        const dayExNames = exMap[dayKey] || [];
-        const dayExercises = dayExNames.map(exName => ({
-          name: exName,
-          sets: setsMap[exName] || 3,
-          reps: repsMap[exName] || 10,
-          rest: restMap[exName] || "60s"
-        }));
-        planDays.push({
-          day: dayKey,
-          focus: dayFocus,
-          exercises: dayExercises
+
+      // 1. If exercises is a flat array of objects (our modern backend structure!)
+      if (Array.isArray(planSource.exercises)) {
+        const exercises = planSource.exercises;
+        const dayKeys = Object.keys(split);
+        
+        dayKeys.forEach((dayKey, idx) => {
+          const dayFocus = split[dayKey];
+          const exercisesPerDay = Math.ceil(exercises.length / dayKeys.length);
+          const startIdx = idx * exercisesPerDay;
+          const endIdx = startIdx + exercisesPerDay;
+          
+          const dayExercises = exercises.slice(startIdx, endIdx).map(ex => ({
+            name: ex.name || ex.exercise_name || "Exercise",
+            sets: ex.sets || 3,
+            reps: ex.reps || 10,
+            rest: ex.rest_time || ex.rest || "60s"
+          }));
+
+          planDays.push({
+            day: dayKey,
+            focus: dayFocus,
+            exercises: dayExercises
+          });
         });
-      });
+      } 
+      // 2. Legacy structure: mappings of maps
+      else {
+        const exMap = planSource.exercises || {};
+        const setsMap = planSource.sets || {};
+        const repsMap = planSource.reps || {};
+        const restMap = planSource.rest_time || {};
+
+        Object.keys(split).forEach(dayKey => {
+          const dayFocus = split[dayKey];
+          const dayExNames = exMap[dayKey] || [];
+          const dayExercises = dayExNames.map(exName => ({
+            name: exName,
+            sets: setsMap[exName] || 3,
+            reps: repsMap[exName] || 10,
+            rest: restMap[exName] || "60s"
+          }));
+          planDays.push({
+            day: dayKey,
+            focus: dayFocus,
+            exercises: dayExercises
+          });
+        });
+      }
+
+      const rationaleText = data.rationale || planSource.progression_strategy || "Focus on progressive overload.";
+      const cardioText = data.progression_notes || planSource.cardio_plan || "N/A";
+      const goalText = data.goal || planSource.goal || "General Fitness";
 
       setGeneratedPlan({
-        goal: data.goal,
+        goal: goalText,
         plan: planDays,
-        rationale: `This customized program targets your goal of ${data.goal}. Cardio Recommendation: ${data.cardio_plan || 'N/A'}.`,
-        progression: data.progression_strategy
+        rationale: `This customized program targets your goal of ${goalText}. Cardio Recommendation: ${cardioText}.`,
+        progression: rationaleText
       });
       setGenStep(4);
     } catch (err) {
@@ -362,7 +464,7 @@ const AIRecommendations = () => {
             <div className="flex-1 overflow-y-auto py-3 space-y-3 scrollbar-hide">
               {messages.map((msg, i) => (
                 <div key={i} className={`flex flex-col max-w-[88%] ${msg.sender === 'user' ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
-                  <div className={`p-3.5 rounded-2xl text-xs leading-relaxed font-medium ${msg.sender === 'user' ? 'bg-green-500 text-black rounded-tr-none font-bold' : 'bg-white/5 border border-white/10 text-gray-200 rounded-tl-none'}`}>{msg.text}</div>
+                  <div className={`p-3.5 rounded-2xl text-xs leading-relaxed font-medium whitespace-pre-wrap ${msg.sender === 'user' ? 'bg-green-500 text-black rounded-tr-none font-bold' : 'bg-white/5 border border-white/10 text-gray-200 rounded-tl-none'}`}>{msg.text}</div>
                   <span className="text-[8px] text-gray-600 mt-1 font-mono">{msg.time}</span>
                 </div>
               ))}
