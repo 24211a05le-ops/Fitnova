@@ -25,7 +25,7 @@ class AIService:
             # Under local dev/testing without key, fallback to mock generation
             return AIService._get_mock_response(prompt, response_format)
 
-        cache_key = f"{prompt}_{system_instruction}_{response_format}"
+        cache_key = f"{prompt}_{system_instruction}_{response_format}_{custom_model}"
         if cache_key in _ai_cache:
             return _ai_cache[cache_key]
 
@@ -68,7 +68,18 @@ class AIService:
                     )
                     if response.status_code == 200:
                         res_json = response.json()
-                        text_content = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                        candidates = res_json.get("candidates") or []
+                        if not candidates:
+                            raise ValueError("AI provider returned no candidates")
+
+                        content = candidates[0].get("content") or {}
+                        parts = content.get("parts") or []
+                        text_content = next(
+                            (part.get("text") for part in parts if isinstance(part, dict) and part.get("text")),
+                            None
+                        )
+                        if not text_content:
+                            raise ValueError("AI provider returned an empty response body")
                         
                         # Cache the result
                         _ai_cache[cache_key] = text_content

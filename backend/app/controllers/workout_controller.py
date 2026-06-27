@@ -1,24 +1,85 @@
+from datetime import datetime
+
 from flask import request
 from flask_jwt_extended import get_jwt_identity
 from app import db
 from app.models.workout import Workout
+from app.services.insight_service import InsightService
 from app.utils.responses import api_response, error_response
 
 def create_workout():
     """Logs a new workout entry POST request"""
     try:
-        user_id = get_jwt_identity()
-        data = request.get_json()
+        user_id = int(get_jwt_identity())
+        data = request.get_json() or {}
         if not data:
             return error_response("Request payload is empty or not JSON format", status_code=400)
 
-        # Enforce required parameters validation
+        batch_exercises = data.get("exercises")
+        if isinstance(batch_exercises, list) and batch_exercises:
+            workout_name = (data.get("name") or data.get("workout_name") or "").strip()
+            if not workout_name:
+                return error_response("Field 'name' or 'workout_name' is required", status_code=400)
+
+            try:
+                total_calories = int(data.get("calories_burned") or data.get("calories", 0))
+                total_duration = int(data.get("duration", 0))
+            except ValueError:
+                return error_response("Calories and duration must be valid integers", status_code=400)
+
+            timestamp = datetime.utcnow().replace(microsecond=0)
+            created_rows = []
+            exercise_count = len(batch_exercises)
+            remaining_calories = total_calories
+            remaining_duration = total_duration
+
+            for idx, exercise in enumerate(batch_exercises):
+                if not exercise.get("name"):
+                    continue
+
+                sets_payload = exercise.get("sets") or []
+                first_set = sets_payload[0] if sets_payload else {}
+                set_count = max(1, len(sets_payload))
+                rep_value = int(first_set.get("reps", 0) or 0)
+
+                calories_piece = 0
+                duration_piece = 0
+                if idx == 0:
+                    calories_piece = remaining_calories
+                    duration_piece = remaining_duration
+
+                created_rows.append(
+                    Workout(
+                        user_id=user_id,
+                        workout_name=workout_name,
+                        exercise_name=exercise.get("name").strip(),
+                        sets=set_count,
+                        reps=rep_value,
+                        calories_burned=calories_piece,
+                        duration=duration_piece,
+                        created_at=timestamp,
+                    )
+                )
+
+            if not created_rows:
+                return error_response("At least one exercise entry is required", status_code=400)
+
+            db.session.add_all(created_rows)
+            db.session.commit()
+
+            session_payload = InsightService.group_workout_sessions(created_rows)[0]
+            return api_response(
+                success=True,
+                message="Workout routine synchronized successfully with backend database",
+                data={"workout": session_payload, "records": [row.to_dict() for row in created_rows]},
+                status_code=201,
+            )
+
         required_fields = ["workout_name", "exercise_name"]
         for field in required_fields:
             if not data.get(field):
                 return error_response(f"Field '{field}' is required", status_code=400)
 
-        # Numeric and type casting validation
         try:
             sets = int(data.get("sets", 1))
             reps = int(data.get("reps", 1))
@@ -34,7 +95,7 @@ def create_workout():
             sets=sets,
             reps=reps,
             calories_burned=calories_burned,
-            duration=duration
+            duration=duration,
         )
 
         db.session.add(workout)
@@ -43,7 +104,7 @@ def create_workout():
         return api_response(
             success=True, 
             message="Workout routine synchronized successfully with backend database", 
-            data=workout.to_dict(),
+            data={"workout": InsightService.group_workout_sessions([workout])[0], "records": [workout.to_dict()]},
             status_code=201
         )
 
@@ -54,9 +115,13 @@ def create_workout():
 def get_workouts():
     """Lists all workouts recorded by the active authenticated user"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         workouts = Workout.query.filter_by(user_id=user_id).order_by(Workout.created_at.desc()).all()
-        
+
+        if request.args.get("view") == "sessions":
+            sessions = InsightService.group_workout_sessions(workouts)
+            return api_response(success=True, message="Workout sessions fetched successfully", data={"sessions": sessions})
+
         workouts_data = [w.to_dict() for w in workouts]
         return api_response(success=True, message="Workouts fetched successfully", data=workouts_data)
     except Exception as e:

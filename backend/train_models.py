@@ -14,11 +14,11 @@ def run_retraining():
         print(" FITNOVA MACHINE LEARNING TRAINING PIPELINE ")
         print("====================================================")
         
-        print("\n[1/4] Training Weight Prediction model (LinearRegression)...")
+        print("\n[1/4] Training Weight Forecast model (LinearRegression, 2w/1m/3m horizons)...")
         weight_mse = MLService.train_weight_model()
         print(f"Weight model trained. MSE: {weight_mse:.5f}")
 
-        print("\n[2/4] Training Consistency Dropout model (LogisticRegression)...")
+        print("\n[2/4] Training Workout Consistency model (RandomForestClassifier)...")
         consistency_acc = MLService.train_consistency_model()
         print(f"Consistency model trained. Accuracy: {consistency_acc:.5f}")
 

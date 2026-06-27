@@ -9,32 +9,8 @@ from app.models.exercise_embedding import ExerciseEmbedding
 from app.models.user import User
 from app.models.workout import Workout
 from app.services.ai_service import AIService
+from app.services.insight_service import InsightService
 from app.utils.responses import api_response, error_response
-
-# Seed initial embeddings if empty
-def _ensure_exercise_embeddings():
-    if ExerciseEmbedding.query.count() == 0:
-        presets = [
-            {"name": "Barbell Bench Press", "muscle": "Chest", "tags": "chest, upper chest, bench press, incline, compound, push, bar", "diff": "Intermediate", "equip": "Gym"},
-            {"name": "Push-Ups", "muscle": "Chest", "tags": "chest, bodyweight, push, home, beginner, chest burn", "diff": "Beginner", "equip": "Home"},
-            {"name": "Dumbbell Flyes", "muscle": "Chest", "tags": "chest, isolation, dumbbell, outer chest", "diff": "Beginner", "equip": "Gym"},
-            {"name": "Deadlift", "muscle": "Back", "tags": "back, lower back, compound, deadlift, pull, heavy", "diff": "Advanced", "equip": "Gym"},
-            {"name": "Pull-Ups", "muscle": "Back", "tags": "back, lats, upper back, bodyweight, pull, bar", "diff": "Intermediate", "equip": "Home"},
-            {"name": "Barbell Squats", "muscle": "Legs", "tags": "legs, quads, hamstrings, glutes, compound, squats, bar", "diff": "Intermediate", "equip": "Gym"},
-            {"name": "Overhead Press", "muscle": "Shoulders", "tags": "shoulders, delts, overhead press, bar, military press", "diff": "Intermediate", "equip": "Gym"},
-            {"name": "Barbell Curls", "muscle": "Arms", "tags": "arms, biceps, curls, isolation, bar", "diff": "Beginner", "equip": "Gym"},
-            {"name": "Plank Hold", "muscle": "Core", "tags": "core, abs, plank, flat stomach, bodyweight", "diff": "Beginner", "equip": "Home"}
-        ]
-        for p in presets:
-            emb = ExerciseEmbedding(
-                exercise_name=p["name"],
-                muscle_group=p["muscle"],
-                tags=p["tags"],
-                difficulty=p["diff"],
-                equipment=p["equip"]
-            )
-            db.session.add(emb)
-        db.session.commit()
 
 def generate_workout():
     try:
@@ -207,13 +183,21 @@ def get_meal_plans():
 
 def exercise_smart_search():
     try:
-        _ensure_exercise_embeddings()
+        InsightService.ensure_exercise_embeddings()
         q = request.args.get("query", "").strip().lower()
+        all_embeddings = ExerciseEmbedding.query.order_by(
+            ExerciseEmbedding.muscle_group.asc(),
+            ExerciseEmbedding.exercise_name.asc()
+        ).all()
+
         if not q:
-            return api_response(success=True, message="Empty query", data={"results": []})
+            return api_response(
+                success=True,
+                message=f"Loaded {len(all_embeddings)} exercises",
+                data={"results": [exercise.to_dict() for exercise in all_embeddings]},
+            )
 
         # Match exercises based on tags/muscle/name synonym matching
-        all_embeddings = ExerciseEmbedding.query.all()
         results = []
         for e in all_embeddings:
             # Direct match or semantic tag contains
@@ -243,15 +227,23 @@ def exercise_smart_search():
 
 def get_dashboard_widgets():
     try:
-        data = {
-            "calories_burned": {"today": 487, "goal": 600, "week_total": 3240},
-            "workout_streak": {"current": 5, "best": 12, "unit": "days"},
-            "weekly_consistency": {"completed": 4, "planned": 5, "percentage": 80},
-            "goal_progress": {"current": 68, "target": 100, "label": "On Track"},
-            "recovery_status": {"score": 84, "label": "Fully Recovered", "color": "green"},
-            "muscle_groups_trained": ["Chest", "Back", "Shoulders", "Core"]
-        }
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user:
+            return error_response("User not found", status_code=404)
+
+        workouts = Workout.query.filter_by(user_id=user_id).order_by(Workout.created_at.desc()).all()
+        sessions = InsightService.group_workout_sessions(workouts)
+        weight_logs = user.weight_logs[:]
+        weight_logs.sort(key=lambda log: log.date, reverse=True)
+        exercise_catalog = InsightService.get_exercise_catalog()
+        data = InsightService.build_dashboard_widgets(
+            user=user,
+            sessions=sessions,
+            weight_logs=weight_logs,
+            fitness_profile=user.fitness_profile,
+            exercise_catalog=exercise_catalog,
+        )
         return api_response(success=True, message="Dashboard widgets", data=data)
     except Exception as e:
         return error_response(f"Error: {str(e)}", status_code=500)
-

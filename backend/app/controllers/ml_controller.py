@@ -1,8 +1,12 @@
 import json
+from datetime import datetime
 from flask import request
 from flask_jwt_extended import get_jwt_identity
 from app import db
 from app.models.prediction import MLPrediction
+from app.models.weight_log import WeightLog
+from app.models.workout import Workout
+from app.models.fitness_profile import FitnessProfile
 from app.services.ml_service import MLService
 from app.utils.responses import api_response, error_response
 
@@ -10,15 +14,38 @@ def predict_weight():
     try:
         user_id = get_jwt_identity()
         data = request.get_json() or {}
-        
-        current = float(data.get("current_weight", 80.0))
-        calories = int(data.get("calorie_intake", 2000))
-        freq = float(data.get("workout_frequency", 3.0))
-        steps = int(data.get("steps", 8000))
-        sleep = float(data.get("sleep", 7.0))
-        consistency = float(data.get("consistency_score", 0.8))
 
-        pred = MLService.predict_weight(current, calories, freq, steps, sleep, consistency)
+        logs = WeightLog.query.filter_by(user_id=int(user_id)).order_by(WeightLog.date.asc()).all()
+        current = float(data.get("current_weight") or (logs[-1].weight if logs else 80.0))
+
+        trend_14 = float(data.get("trend_14", 0.0))
+        trend_30 = float(data.get("trend_30", 0.0))
+
+        if logs and len(logs) >= 2 and ("trend_14" not in data or "trend_30" not in data):
+            latest_date = logs[-1].date
+            w14 = next((l.weight for l in reversed(logs) if (latest_date - l.date).days >= 14), logs[0].weight)
+            w30 = next((l.weight for l in reversed(logs) if (latest_date - l.date).days >= 30), logs[0].weight)
+            if "trend_14" not in data:
+                trend_14 = current - float(w14)
+            if "trend_30" not in data:
+                trend_30 = current - float(w30)
+
+        profile = FitnessProfile.query.filter_by(user_id=int(user_id)).first()
+        goal = data.get("goal") or data.get("fitness_goal") or (profile.fitness_goal if profile else "maintain")
+
+        activity_level = data.get("activity_level")
+        if activity_level is None:
+            available_days = profile.available_days if profile and profile.available_days else 3
+            if available_days <= 1:
+                activity_level = "sedentary"
+            elif available_days <= 3:
+                activity_level = "light"
+            elif available_days <= 5:
+                activity_level = "moderate"
+            else:
+                activity_level = "active"
+
+        pred = MLService.predict_weight(current, trend_14, trend_30, goal, activity_level)
 
         # Log prediction
         db_pred = MLPrediction(
@@ -39,14 +66,22 @@ def predict_consistency():
     try:
         user_id = get_jwt_identity()
         data = request.get_json() or {}
-        
-        streak = int(data.get("streak_days", 5))
-        skipped = int(data.get("skipped_workouts", 1))
-        activity = int(data.get("app_activity", 10))
-        freq = float(data.get("workout_frequency", 3.0))
+
+        workouts = Workout.query.filter_by(user_id=int(user_id)).order_by(Workout.created_at.asc()).all()
+
+        freq = float(data.get("workout_frequency", min(len(workouts), 7)))
+        missed = float(data.get("missed_sessions", data.get("skipped_workouts", 0)))
+
+        if "missed_sessions" not in data and "skipped_workouts" not in data and workouts:
+            last_14 = [w for w in workouts if (datetime.utcnow() - w.created_at).days <= 14]
+            expected_sessions = 6
+            missed = max(0, expected_sessions - len(last_14))
+
+        login_days = float(data.get("login_days", data.get("app_activity", 10)))
+        streak = float(data.get("streak_days", 0))
         duration = float(data.get("session_duration", 45.0))
 
-        pred = MLService.predict_dropout_risk(streak, skipped, activity, freq, duration)
+        pred = MLService.predict_dropout_risk(freq, missed, login_days, streak, duration)
 
         # Log prediction
         db_pred = MLPrediction(
@@ -67,14 +102,14 @@ def predict_recovery():
     try:
         user_id = get_jwt_identity()
         data = request.get_json() or {}
-        
-        soreness = int(data.get("soreness", 3))
-        sleep = float(data.get("sleep", 7.5))
-        calories = int(data.get("calories", 2000))
-        intensity = int(data.get("workout_intensity", 5))
-        stress = int(data.get("stress_level", 3))
 
-        pred = MLService.predict_recovery_score(soreness, sleep, calories, intensity, stress)
+        sleep = float(data.get("sleep_hours", data.get("sleep", 7.5)))
+        duration = float(data.get("workout_duration", data.get("duration", 50.0)))
+        intensity = float(data.get("workout_intensity", 5))
+        soreness = float(data.get("muscle_soreness", data.get("soreness", 3)))
+        calories_burned = float(data.get("calories_burned", data.get("calories", 350)))
+
+        pred = MLService.predict_recovery_score(sleep, duration, intensity, soreness, calories_burned)
 
         # Log prediction
         db_pred = MLPrediction(
@@ -95,13 +130,13 @@ def predict_progressive_overload():
     try:
         user_id = get_jwt_identity()
         data = request.get_json() or {}
-        
-        weight = float(data.get("prev_weight", 60.0))
-        reps = int(data.get("reps_completed", 10))
-        fatigue = int(data.get("fatigue_level", 5))
-        consistency = float(data.get("consistency", 0.8))
 
-        pred = MLService.predict_progressive_overload(weight, reps, fatigue, consistency)
+        weight = float(data.get("prev_weight", data.get("last_weight", 60.0)))
+        reps = int(data.get("reps_completed", data.get("last_reps", 8)))
+        sets = int(data.get("sets_completed", data.get("last_sets", 3)))
+        trend = float(data.get("exercise_trend", 0.0))
+
+        pred = MLService.predict_progressive_overload(weight, reps, sets, trend)
 
         # Log prediction
         db_pred = MLPrediction(

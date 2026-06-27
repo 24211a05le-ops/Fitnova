@@ -122,6 +122,48 @@ These endpoints are optimized for direct integration with the frontend, running 
 * `POST /api/predict` *(Protected)* - Forecast weight and muscle changes over 12 weeks based on goals.
 * `POST /api/diet/generate` *(Protected)* - Compile a full 4-meal plan, daily calories target, and macros based on diet preferences.
 
+### 7. Machine Learning Prediction APIs (`/api/ml`)
+* `POST /api/ml/predict-weight` *(Protected)* - Predicts future weight at 2 weeks, 1 month, and 3 months.
+* `POST /api/ml/predict-consistency` *(Protected)* - Predicts consistency probability and dropout probability.
+* `POST /api/ml/predict-recovery` *(Protected)* - Predicts recovery score (0-100) and recovery status.
+* `POST /api/ml/predict-overload` *(Protected)* - Predicts progressive overload recommendation (weight/reps/sets).
+* `POST /api/ml/retrain` *(Protected)* - Retrains all ML models and returns performance metrics.
+
+#### Example: Recovery Score Prediction
+```json
+POST /api/ml/predict-recovery
+{
+  "sleep_hours": 7.5,
+  "workout_duration": 65,
+  "workout_intensity": 7,
+  "muscle_soreness": 4,
+  "calories_burned": 520
+}
+```
+
+#### Example: Weight Prediction
+```json
+POST /api/ml/predict-weight
+{
+  "current_weight": 81.2,
+  "trend_14": -0.8,
+  "trend_30": -1.4,
+  "goal": "Weight Loss",
+  "activity_level": "moderate"
+}
+```
+
+#### Example: Progressive Overload
+```json
+POST /api/ml/predict-overload
+{
+  "prev_weight": 60,
+  "reps_completed": 8,
+  "sets_completed": 3,
+  "exercise_trend": 0.6
+}
+```
+
 ---
 
 ## 🚀 Setup & Execution Guide

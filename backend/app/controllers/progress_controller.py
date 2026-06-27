@@ -1,14 +1,17 @@
+from datetime import datetime
+
 from flask import request
 from flask_jwt_extended import get_jwt_identity
 from app import db
 from app.models.progress_log import ProgressLog
+from app.models.user import User
 from app.utils.responses import api_response, error_response
 
 def create_progress():
     """Logs a new physical metric checkpoint POST request"""
     try:
-        user_id = get_jwt_identity()
-        data = request.get_json()
+        user_id = int(get_jwt_identity())
+        data = request.get_json() or {}
         if not data:
             return error_response("Request payload is empty or not JSON format", status_code=400)
 
@@ -21,18 +24,39 @@ def create_progress():
             weight = float(data.get("weight"))
             body_fat = float(data.get("body_fat")) if data.get("body_fat") is not None else None
             muscle_mass = float(data.get("muscle_mass")) if data.get("muscle_mass") is not None else None
+            chest = float(data.get("chest")) if data.get("chest") is not None else None
+            waist = float(data.get("waist")) if data.get("waist") is not None else None
+            biceps = float(data.get("biceps")) if data.get("biceps") is not None else None
+            thighs = float(data.get("thighs")) if data.get("thighs") is not None else None
         except ValueError:
-            return error_response("Weight, body_fat, and muscle_mass must be valid positive numbers", status_code=400)
+            return error_response("Progress metrics must be valid positive numbers", status_code=400)
+
+        log_date = data.get("date")
+        if log_date:
+            try:
+                log_date = datetime.strptime(log_date, "%Y-%m-%d").date()
+            except ValueError:
+                return error_response("Date must be in YYYY-MM-DD format", status_code=400)
+        else:
+            log_date = datetime.utcnow().date()
 
         progress = ProgressLog(
             user_id=user_id,
+            date=log_date,
             weight=weight,
             body_fat=body_fat,
             muscle_mass=muscle_mass,
+            chest=chest,
+            waist=waist,
+            biceps=biceps,
+            thighs=thighs,
             notes=data.get("notes", "").strip()
         )
 
         db.session.add(progress)
+        user = User.query.get(user_id)
+        if user:
+            user.weight = weight
         db.session.commit()
 
         return api_response(
@@ -60,7 +84,7 @@ def get_progress():
 def update_progress(log_id):
     """Edits details of an existing physical biometric checkpoint log"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         progress = ProgressLog.query.filter_by(id=log_id, user_id=user_id).first()
         if not progress:
             return error_response("Progress log not found", status_code=404)
@@ -77,12 +101,30 @@ def update_progress(log_id):
                 progress.body_fat = float(data.get("body_fat"))
             if "muscle_mass" in data:
                 progress.muscle_mass = float(data.get("muscle_mass"))
+            if "chest" in data:
+                progress.chest = float(data.get("chest")) if data.get("chest") is not None else None
+            if "waist" in data:
+                progress.waist = float(data.get("waist")) if data.get("waist") is not None else None
+            if "biceps" in data:
+                progress.biceps = float(data.get("biceps")) if data.get("biceps") is not None else None
+            if "thighs" in data:
+                progress.thighs = float(data.get("thighs")) if data.get("thighs") is not None else None
         except ValueError:
-            return error_response("Weight, body fat, and muscle mass metrics must be valid numbers", status_code=400)
+            return error_response("Progress metrics must be valid numbers", status_code=400)
+
+        if "date" in data and data.get("date"):
+            try:
+                progress.date = datetime.strptime(data.get("date"), "%Y-%m-%d").date()
+            except ValueError:
+                return error_response("Date must be in YYYY-MM-DD format", status_code=400)
 
         if "notes" in data:
             progress.notes = data.get("notes", "").strip()
 
+        if "weight" in data:
+            user = User.query.get(user_id)
+            if user:
+                user.weight = progress.weight
         db.session.commit()
         return api_response(success=True, message="Progress checkpoint updated successfully", data=progress.to_dict())
 

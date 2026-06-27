@@ -3,6 +3,7 @@ from flask_jwt_extended import get_jwt_identity
 from datetime import datetime, timedelta
 from app import db
 from app.models.weight_log import WeightLog
+from app.models.user import User
 from app.utils.responses import api_response, error_response
 
 def add_weight_log():
@@ -21,6 +22,9 @@ def add_weight_log():
             log_date = datetime.utcnow().date()
         weight_log = WeightLog(user_id=int(user_id), weight=float(data["weight"]), date=log_date, notes=data.get("notes", ""), photo_url=data.get("photo_url"))
         db.session.add(weight_log)
+        user = User.query.get(int(user_id))
+        if user:
+            user.weight = float(data["weight"])
         db.session.commit()
         return api_response(success=True, message="Weight logged successfully", data=weight_log.to_dict(), status_code=201)
     except Exception as e:
