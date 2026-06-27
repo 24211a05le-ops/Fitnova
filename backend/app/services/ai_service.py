@@ -5,8 +5,8 @@ import requests
 from flask import current_app
 
 PRIMARY_MODEL = "gemini-2.5-flash"
-SECONDARY_MODEL = "gemini-2.0-flash"
-FALLBACK_MODEL = "gemini-1.5-flash"
+SECONDARY_MODEL = "gemini-2.5-flash-lite"
+FALLBACK_MODEL = "gemini-flash-lite-latest"
 
 # In-memory caching for prompt outputs
 _ai_cache = {}
@@ -29,7 +29,7 @@ class AIService:
         if cache_key in _ai_cache:
             return _ai_cache[cache_key]
 
-        models_to_try = [PRIMARY_MODEL, SECONDARY_MODEL, FALLBACK_MODEL, "gemini-flash-latest"]
+        models_to_try = [PRIMARY_MODEL, SECONDARY_MODEL, FALLBACK_MODEL]
         if custom_model:
             models_to_try.insert(0, custom_model)
 
@@ -64,7 +64,7 @@ class AIService:
                         url,
                         headers={"Content-Type": "application/json"},
                         json=payload,
-                        timeout=15
+                        timeout=45
                     )
                     if response.status_code == 200:
                         res_json = response.json()
@@ -73,11 +73,17 @@ class AIService:
                         # Cache the result
                         _ai_cache[cache_key] = text_content
                         return text_content
+                    elif response.status_code in (429, 503, 500):
+                        # Rate limit or server error — try next model immediately
+                        print(f"[Gemini Service] Model {model} returned status {response.status_code}, trying next model.")
+                        break
                     else:
                         print(f"[Gemini Service] Model {model} returned status {response.status_code}: {response.text}")
                         break # Try next model
                 except Exception as e:
                     print(f"[Gemini Service] Error calling model {model} on attempt {attempt}: {str(e)}")
+                    if attempt == retries - 1:
+                        break  # Move on to next model after all retries exhausted
 
         # If all API calls fail, fallback to mock
         return AIService._get_mock_response(prompt, response_format)
