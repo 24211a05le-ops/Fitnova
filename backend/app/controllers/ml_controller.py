@@ -4,6 +4,7 @@ from flask import request
 from flask_jwt_extended import get_jwt_identity
 from app import db
 from app.models.prediction import MLPrediction
+from app.models.ml_model_metric import MLModelMetric
 from app.models.weight_log import WeightLog
 from app.models.workout import Workout
 from app.models.fitness_profile import FitnessProfile
@@ -165,7 +166,11 @@ def retrain_models():
             "weight_model_mse": round(weight_mse, 5),
             "consistency_model_accuracy": round(consistency_acc, 5),
             "recovery_model_mse": round(recovery_mse, 5),
-            "overload_model_mse": round(overload_mse, 5)
+            "overload_model_mse": round(overload_mse, 5),
+            "latest_metrics": {
+                metric.model_name: metric.to_dict()
+                for metric in MLModelMetric.query.order_by(MLModelMetric.created_at.desc()).all()
+            }
         }
 
         return api_response(success=True, message="All machine learning models retrained successfully", data=scores)

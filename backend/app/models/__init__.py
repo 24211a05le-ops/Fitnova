@@ -9,6 +9,7 @@ from app.models.ai_chat_history import AIChatHistory
 from app.models.meal_plan import MealPlan
 from app.models.prediction import MLPrediction
 from app.models.exercise_embedding import ExerciseEmbedding
+from app.models.ml_model_metric import MLModelMetric
 
 __all__ = [
     'User', 
@@ -21,5 +22,6 @@ __all__ = [
     'AIChatHistory',
     'MealPlan',
     'MLPrediction',
-    'ExerciseEmbedding'
+    'ExerciseEmbedding',
+    'MLModelMetric'
 ]
