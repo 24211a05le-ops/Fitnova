@@ -4,7 +4,7 @@ import { Sparkles, Brain, Zap, MessageSquare, Send, Loader2, ArrowRight, ArrowLe
 import { useAuth } from '../context/AuthContext';
 import { useWorkout } from '../context/WorkoutContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { sendAIChatMessage, getAIChatHistory, generateAIWorkout } from '../services/aiService';
+import { sendAIChatMessage, getAIChatHistory, generateAIWorkout, getAIWorkoutPlans } from '../services/aiService';
 
 const AIRecommendations = () => {
   const { user } = useAuth();
@@ -23,6 +23,30 @@ const AIRecommendations = () => {
     { sender: 'coach', text: `Hey ${user?.name || 'there'}! I'm your AI Coach. Ask me about workouts, recovery, nutrition, or use the Workout Generator to build a custom plan.`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
   ]);
   const [isTyping, setIsTyping] = useState(false);
+  const insightCards = [
+    {
+      title: 'Goal Alignment',
+      desc: `Current focus: ${user?.fitness_goal || 'General Fitness'}. ${generatedPlan ? 'Your latest AI plan is aligned to that target.' : 'Generate a plan to tailor your next training block.'}`,
+      icon: <Target size={16} className="text-blue-400" />,
+      color: 'border-blue-500/10 bg-blue-500/5'
+    },
+    {
+      title: 'Workout Volume',
+      desc: history.length > 0
+        ? `${history.length} workout sessions are logged. Your most recent session was ${history[0]?.name || 'a completed workout'}.`
+        : 'No workout sessions logged yet. Add a workout to unlock richer coaching context.',
+      icon: <TrendingUp size={16} className="text-green-400" />,
+      color: 'border-green-500/10 bg-green-500/5'
+    },
+    {
+      title: 'Plan Coverage',
+      desc: generatedPlan
+        ? `${generatedPlan.plan.length} training days are scheduled in your latest plan with progressive overload guidance included.`
+        : 'Saved AI plans will appear here once you generate your first routine.',
+      icon: <Award size={16} className="text-yellow-400" />,
+      color: 'border-yellow-500/10 bg-yellow-500/5'
+    },
+  ];
 
   // Fetch chat logs on load
   useEffect(() => {
@@ -215,7 +239,7 @@ const AIRecommendations = () => {
       console.error("Chat communication failed:", err);
       setMessages(prev => [...prev, {
         sender: 'coach',
-        text: "I experienced a connection issue to the AI coach node. Please check your OpenRouter API Key configuration inside the backend .env!",
+        text: "I hit a connection issue while reaching the AI coach service. Please verify the backend AI configuration and try again.",
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }]);
     } finally {
@@ -433,11 +457,7 @@ const AIRecommendations = () => {
           <section className="bg-gray-950 border border-white/5 rounded-[32px] p-6 sm:p-8">
             <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-6"><Brain className="text-blue-500" size={20} /> Performance Insights</h3>
             <div className="space-y-3">
-              {[
-                { title: 'Chest & Arm Ratio', desc: 'Triceps volume is 14% below optimal. Add overhead extensions for bench press lockout power.', icon: <TrendingUp size={16} className="text-blue-400" />, color: 'border-blue-500/10 bg-blue-500/5' },
-                { title: 'Recovery Window', desc: 'Heart rate recovery shows rapid deceleration. You\'re primed for high-intensity training today.', icon: <Zap size={16} className="text-green-400" />, color: 'border-green-500/10 bg-green-500/5' },
-                { title: 'Consistency Milestone', desc: '3 weeks of stable routine structure. Muscle memory integration up 12% on compound lifts.', icon: <Award size={16} className="text-yellow-400" />, color: 'border-yellow-500/10 bg-yellow-500/5' },
-              ].map((insight, i) => (
+              {insightCards.map((insight, i) => (
                 <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}
                   className={`p-4 rounded-2xl border ${insight.color} flex gap-3`}>
                   <div className="w-8 h-8 rounded-lg bg-black/30 flex items-center justify-center shrink-0">{insight.icon}</div>

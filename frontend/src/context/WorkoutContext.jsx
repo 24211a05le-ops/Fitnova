@@ -1,63 +1,35 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { saveWorkout } from '../services/workoutService';
+import { saveWorkout, getWorkoutSessions } from '../services/workoutService';
+import { useAuth } from './AuthContext';
 
 const WorkoutContext = createContext();
 
 export const WorkoutProvider = ({ children }) => {
-  const [exercises, setExercises] = useState([
-    {
-      id: 1,
-      name: 'Barbell Bench Press',
-      type: 'Strength',
-      sets: [
-        { reps: 10, weight: 60, completed: true },
-        { reps: 8, weight: 65, completed: true },
-        { reps: 6, weight: 70, completed: false },
-      ],
-    },
-    {
-      id: 2,
-      name: 'Incline Dumbbell Flys',
-      type: 'Hypertrophy',
-      sets: [
-        { reps: 12, weight: 15, completed: false },
-        { reps: 12, weight: 15, completed: false },
-      ],
-    },
-  ]);
-  
+  const { user } = useAuth();
+  const [exercises, setExercises] = useState([]);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Initial mock history load
   useEffect(() => {
-    const storedHistory = localStorage.getItem('fitnova_workout_history');
-    if (storedHistory) {
-      setHistory(JSON.parse(storedHistory));
-    } else {
-      const defaultHistory = [
-        {
-          id: 101,
-          name: 'Pull Day: Back & Biceps',
-          date: 'Yesterday, 06:15 PM',
-          duration: 75,
-          calories: 680,
-          exercisesCount: 5,
-        },
-        {
-          id: 102,
-          name: 'Morning Yoga & Stretching',
-          date: '2 days ago',
-          duration: 30,
-          calories: 120,
-          exercisesCount: 3,
-        },
-      ];
-      setHistory(defaultHistory);
-      localStorage.setItem('fitnova_workout_history', JSON.stringify(defaultHistory));
-    }
-  }, []);
+    const loadHistory = async () => {
+      if (!user) {
+        setHistory([]);
+        setExercises([]);
+        return;
+      }
+
+      try {
+        const data = await getWorkoutSessions();
+        setHistory(data.sessions || []);
+      } catch (error) {
+        console.error('Failed to load workout history:', error);
+        setHistory([]);
+      }
+    };
+
+    loadHistory();
+  }, [user]);
 
   const addExercise = (name, type) => {
     const newExercise = {
@@ -132,19 +104,8 @@ export const WorkoutProvider = ({ children }) => {
       };
       
       const result = await saveWorkout(workoutPayload);
-      
-      const newHistoryItem = {
-        id: result.workout.id,
-        name: result.workout.name,
-        date: 'Just now',
-        duration: result.workout.duration,
-        calories: result.workout.calories,
-        exercisesCount: result.workout.exercises.length,
-      };
-
-      const updatedHistory = [newHistoryItem, ...history];
-      setHistory(updatedHistory);
-      localStorage.setItem('fitnova_workout_history', JSON.stringify(updatedHistory));
+      const savedWorkout = result.workout;
+      setHistory((prev) => [savedWorkout, ...prev]);
       
       // Reset active workout
       setExercises([]);

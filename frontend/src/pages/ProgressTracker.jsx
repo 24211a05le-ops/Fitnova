@@ -69,15 +69,26 @@ const ProgressTracker = () => {
     defaultValues: {
       weight: user?.weight || 78,
       bodyFat: 16.5,
-      fitnessGoal: user?.fitnessGoal || 'Weight Loss',
+      fitnessGoal: user?.fitness_goal || user?.fitnessGoal || 'Weight Loss',
       daysPerWeek: 4,
     }
   });
 
+  const latestLog = progressLogs[0];
+  const baselineLog = progressLogs[progressLogs.length - 1];
+
   // Calculate dynamic BMI
-  const weight = progressLogs[progressLogs.length - 1]?.weight || user?.weight || 78.4;
+  const weight = latestLog?.weight || user?.weight || 78.4;
   const height = user?.height || 180;
   const bmi = (weight / Math.pow(height / 100, 2)).toFixed(1);
+  const weightTrend = baselineLog ? (weight - baselineLog.weight).toFixed(1) : '0.0';
+  const bodyFatTrend = latestLog?.bodyFat && baselineLog?.bodyFat ? (latestLog.bodyFat - baselineLog.bodyFat).toFixed(1) : '0.0';
+  const muscleTrend = latestLog?.muscleMass && baselineLog?.muscleMass ? (latestLog.muscleMass - baselineLog.muscleMass).toFixed(1) : '0.0';
+  const visualLogs = progressLogs.slice(0, 3).map((log, index) => ({
+    id: log.id,
+    date: new Date(log.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
+    label: index === 0 ? 'Latest Log' : `${index} ${index === 1 ? 'entry' : 'entries'} ago`,
+  }));
 
   const onPredictSubmit = async (data) => {
     try {
@@ -294,9 +305,9 @@ const ProgressTracker = () => {
       {/* Top Cards: Vital Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Weight', value: `${weight}`, unit: 'kg', trend: '-1.0', color: 'text-green-500' },
-          { label: 'Body Fat', value: `${progressLogs[progressLogs.length - 1]?.bodyFat || 16.2}`, unit: '%', trend: '-0.6', color: 'text-green-500' },
-          { label: 'Muscle Mass', value: `${progressLogs[progressLogs.length - 1]?.muscleMass || 34.8}`, unit: 'kg', trend: '+0.8', color: 'text-blue-500' },
+          { label: 'Weight', value: `${weight}`, unit: 'kg', trend: weightTrend, color: parseFloat(weightTrend) <= 0 ? 'text-green-500' : 'text-orange-500' },
+          { label: 'Body Fat', value: `${latestLog?.bodyFat ?? '--'}`, unit: '%', trend: bodyFatTrend, color: parseFloat(bodyFatTrend) <= 0 ? 'text-green-500' : 'text-orange-500' },
+          { label: 'Muscle Mass', value: `${latestLog?.muscleMass ?? '--'}`, unit: 'kg', trend: muscleTrend, color: parseFloat(muscleTrend) >= 0 ? 'text-blue-500' : 'text-orange-500' },
           { label: 'Body Mass Index (BMI)', value: `${bmi}`, unit: '', trend: '0.0', color: 'text-gray-500' },
         ].map((stat, i) => (
           <div key={i} className="bg-gray-950 border border-white/5 rounded-[32px] p-8 group hover:border-white/10 transition-all shadow-xl">
@@ -326,12 +337,8 @@ const ProgressTracker = () => {
             <button className="text-xs font-bold text-purple-400 hover:text-purple-300 transition-colors uppercase tracking-widest">View Gallery</button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-            {[
-              { date: 'May 16, 2026', label: 'Current Log' },
-              { date: 'Apr 16, 2026', label: '1 Month Ago' },
-              { date: 'Mar 16, 2026', label: '2 Months Ago' },
-            ].map((photo, i) => (
-              <div key={i} className="space-y-4">
+            {visualLogs.map((photo) => (
+              <div key={photo.id} className="space-y-4">
                 <div className="aspect-[3/4] bg-gray-900 rounded-[24px] border border-white/5 flex flex-col items-center justify-center group cursor-pointer overflow-hidden relative shadow-inner">
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-5">
                     <p className="text-[10px] font-black text-white uppercase tracking-widest">Compare metrics</p>
@@ -344,6 +351,11 @@ const ProgressTracker = () => {
                 </div>
               </div>
             ))}
+            {visualLogs.length === 0 && (
+              <div className="col-span-full rounded-[24px] border border-white/5 bg-black p-6 text-sm text-gray-500">
+                Run a prediction or save progress metrics to build your transformation timeline.
+              </div>
+            )}
           </div>
         </div>
 
@@ -356,10 +368,10 @@ const ProgressTracker = () => {
             </h3>
             <div className="space-y-6">
               {[
-                { label: 'Chest Circumference', value: `${progressLogs[progressLogs.length - 1]?.chest || 104}`, unit: 'cm' },
-                { label: 'Waist Circumference', value: `${progressLogs[progressLogs.length - 1]?.waist || 82}`, unit: 'cm' },
-                { label: 'Biceps Peak', value: `${progressLogs[progressLogs.length - 1]?.biceps || 41}`, unit: 'cm' },
-                { label: 'Thigh Circumference', value: `${progressLogs[progressLogs.length - 1]?.thighs || 62}`, unit: 'cm' },
+                { label: 'Chest Circumference', value: `${latestLog?.chest ?? '--'}`, unit: 'cm' },
+                { label: 'Waist Circumference', value: `${latestLog?.waist ?? '--'}`, unit: 'cm' },
+                { label: 'Biceps Peak', value: `${latestLog?.biceps ?? '--'}`, unit: 'cm' },
+                { label: 'Thigh Circumference', value: `${latestLog?.thighs ?? '--'}`, unit: 'cm' },
               ].map((m, i) => (
                 <div key={i} className="flex justify-between items-center group cursor-pointer border-b border-white/[0.02] pb-4 last:border-0 last:pb-0">
                   <span className="text-xs font-bold text-gray-500 group-hover:text-white transition-colors">{m.label}</span>

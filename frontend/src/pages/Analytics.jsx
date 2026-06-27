@@ -2,39 +2,157 @@ import React, { useState } from 'react';
 import ProgressChart from '../components/ProgressChart';
 import { TrendingDown, TrendingUp, Scale, Plus, Trash2, Calendar, Camera, X, Loader2, BarChart3, Target, Flame, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect } from 'react';
+import { useWorkout } from '../context/WorkoutContext';
+import { addWeightLog, deleteWeightLog, getWeightLogs } from '../services/weightService';
+import { getConsistencyHistory, getRecoveryHistory, predictConsistency, predictWeightForecast } from '../services/mlService';
 
 const Analytics = () => {
+  const { history } = useWorkout();
   const [activeTab, setActiveTab] = useState('overview');
   const [showLogModal, setShowLogModal] = useState(false);
   const [weightRange, setWeightRange] = useState('month');
   const [newLog, setNewLog] = useState({ weight: '', date: '', notes: '' });
+  const [mlSummary, setMlSummary] = useState({ loading: false, weightForecast: null, consistency: null });
+  const [weightLogs, setWeightLogs] = useState([]);
+  const [consistencyHistory, setConsistencyHistory] = useState([]);
+  const [recoveryHistory, setRecoveryHistory] = useState([]);
 
-  // Mock weight log data
-  const [weightLogs, setWeightLogs] = useState([
-    { id: 1, weight: 82.0, date: '2026-04-20', notes: 'Starting weight' },
-    { id: 2, weight: 81.5, date: '2026-04-27', notes: '' },
-    { id: 3, weight: 80.8, date: '2026-05-04', notes: 'Feeling lighter' },
-    { id: 4, weight: 81.2, date: '2026-05-08', notes: 'Cheat day effect' },
-    { id: 5, weight: 80.5, date: '2026-05-11', notes: '' },
-    { id: 6, weight: 79.8, date: '2026-05-15', notes: 'New low!' },
-    { id: 7, weight: 79.5, date: '2026-05-19', notes: 'On track' },
-  ]);
-
-  const weightData = weightLogs.map(l => l.weight);
+  const filteredWeightLogs = weightLogs.filter((log) => {
+    if (weightRange === 'week') {
+      return (Date.now() - new Date(log.date).getTime()) <= 7 * 24 * 60 * 60 * 1000;
+    }
+    if (weightRange === 'month') {
+      return (Date.now() - new Date(log.date).getTime()) <= 30 * 24 * 60 * 60 * 1000;
+    }
+    if (weightRange === '3months') {
+      return (Date.now() - new Date(log.date).getTime()) <= 90 * 24 * 60 * 60 * 1000;
+    }
+    return true;
+  });
+  const weightData = filteredWeightLogs.map(l => l.weight);
+  const weightLabels = filteredWeightLogs.map((log) => new Date(log.date).toLocaleDateString([], { month: 'short', day: 'numeric' }));
   const currentWeight = weightLogs[weightLogs.length - 1]?.weight || 0;
   const startWeight = weightLogs[0]?.weight || 0;
   const totalChange = (currentWeight - startWeight).toFixed(1);
   const weeklyChange = weightLogs.length >= 2 ? (weightLogs[weightLogs.length - 1].weight - weightLogs[weightLogs.length - 2].weight).toFixed(1) : 0;
+  const monthlyWorkouts = history.filter((session) => {
+    if (!session.created_at) return false;
+    return (Date.now() - new Date(session.created_at).getTime()) <= 30 * 24 * 60 * 60 * 1000;
+  }).length;
 
-  const handleAddLog = () => {
+  useEffect(() => {
+    const loadWeightLogs = async () => {
+      try {
+        const data = await getWeightLogs('all');
+        const sortedLogs = [...(data.logs || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
+        setWeightLogs(sortedLogs);
+      } catch (error) {
+        console.error('Failed to load weight logs:', error);
+        setWeightLogs([]);
+      }
+    };
+
+    loadWeightLogs();
+  }, []);
+
+  useEffect(() => {
+    const loadMlCharts = async () => {
+      try {
+        const [consistencyData, recoveryData] = await Promise.all([
+          getConsistencyHistory(),
+          getRecoveryHistory(),
+        ]);
+        setConsistencyHistory(consistencyData.history || []);
+        setRecoveryHistory(recoveryData.history || []);
+      } catch (error) {
+        console.error('Failed to load analytics history:', error);
+        setConsistencyHistory([]);
+        setRecoveryHistory([]);
+      }
+    };
+
+    loadMlCharts();
+  }, [history.length, weightLogs.length]);
+
+  const handleAddLog = async () => {
     if (!newLog.weight) return;
-    const log = { id: Date.now(), weight: parseFloat(newLog.weight), date: newLog.date || new Date().toISOString().split('T')[0], notes: newLog.notes };
-    setWeightLogs(prev => [...prev, log].sort((a, b) => new Date(a.date) - new Date(b.date)));
+    try {
+      const created = await addWeightLog({
+        weight: parseFloat(newLog.weight),
+        date: newLog.date || new Date().toISOString().split('T')[0],
+        notes: newLog.notes,
+      });
+      setWeightLogs((prev) => [...prev, created].sort((a, b) => new Date(a.date) - new Date(b.date)));
+    } catch (error) {
+      console.error('Failed to add weight log:', error);
+      return;
+    }
     setNewLog({ weight: '', date: '', notes: '' });
     setShowLogModal(false);
   };
 
-  const handleDeleteLog = (id) => setWeightLogs(prev => prev.filter(l => l.id !== id));
+  const handleDeleteLog = async (id) => {
+    try {
+      await deleteWeightLog(id);
+      setWeightLogs((prev) => prev.filter((log) => log.id !== id));
+    } catch (error) {
+      console.error('Failed to delete weight log:', error);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+
+    const loadMlSummary = async () => {
+      if (weightLogs.length === 0) {
+        setMlSummary({ loading: false, weightForecast: null, consistency: null });
+        return;
+      }
+
+      const current = weightLogs[weightLogs.length - 1]?.weight || 0;
+      const start = weightLogs[0]?.weight || current;
+      const trend30 = current - start;
+      const trend14 = weightLogs.length >= 3 ? current - weightLogs[Math.max(0, weightLogs.length - 3)].weight : trend30 / 2;
+
+      try {
+        setMlSummary((prev) => ({ ...prev, loading: true }));
+
+        const weightForecast = await predictWeightForecast({
+          current_weight: current,
+          trend_14: trend14,
+          trend_30: trend30,
+          goal: current <= start ? 'Weight Loss' : 'Maintain',
+          activity_level: 'moderate',
+        });
+
+        const consistency = await predictConsistency({
+          workout_frequency: Math.min(7, Math.max(1, weightLogs.length)),
+          missed_sessions: Math.max(0, 7 - Math.min(7, weightLogs.length)),
+          login_days: Math.min(30, Math.max(5, weightLogs.length * 3)),
+          streak_days: Math.min(30, weightLogs.length * 2),
+          session_duration: 45,
+        });
+
+        if (!active) return;
+
+        setMlSummary({ loading: false, weightForecast, consistency });
+      } catch (error) {
+        if (!active) return;
+        console.error('Failed to load analytics ML summary:', error);
+        setMlSummary((prev) => ({ ...prev, loading: false }));
+      }
+    };
+
+    loadMlSummary();
+
+    return () => {
+      active = false;
+    };
+  }, [weightLogs]);
+
+  const forecast = mlSummary.weightForecast;
+  const consistency = mlSummary.consistency;
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-10">
@@ -65,9 +183,9 @@ const Analytics = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { label: 'Weight Change', value: `${totalChange}kg`, sub: 'Total', icon: <TrendingDown size={18} />, color: 'text-green-500 bg-green-500/10' },
-              { label: 'Strength Gain', value: '+12%', sub: 'Avg lift', icon: <TrendingUp size={18} />, color: 'text-blue-500 bg-blue-500/10' },
-              { label: 'Workouts', value: '24', sub: 'This month', icon: <Flame size={18} />, color: 'text-orange-500 bg-orange-500/10' },
-              { label: 'Consistency', value: '87%', sub: 'Score', icon: <Target size={18} />, color: 'text-purple-500 bg-purple-500/10' },
+              { label: 'Current Weight', value: currentWeight ? `${currentWeight}kg` : '--', sub: 'Latest log', icon: <TrendingUp size={18} />, color: 'text-blue-500 bg-blue-500/10' },
+              { label: 'Workouts', value: String(monthlyWorkouts), sub: 'This month', icon: <Flame size={18} />, color: 'text-orange-500 bg-orange-500/10' },
+              { label: 'Consistency', value: `${Math.round(mlSummary.consistency?.consistency_probability || 0)}%`, sub: 'ML score', icon: <Target size={18} />, color: 'text-purple-500 bg-purple-500/10' },
             ].map((stat, i) => (
               <motion.div key={i} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
                 className="bg-gray-950 border border-white/5 rounded-2xl p-5">
@@ -79,13 +197,59 @@ const Analytics = () => {
             ))}
           </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="bg-gray-950 border border-white/5 rounded-3xl p-6">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Live ML Forecast</p>
+                  <h3 className="text-lg font-bold text-white mt-1">Weight Prediction</h3>
+                </div>
+                <span className="px-3 py-1.5 rounded-xl bg-green-500/10 text-green-400 text-xs font-black uppercase tracking-widest">{mlSummary.loading ? 'Updating' : 'Live'}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="bg-black rounded-2xl p-4 border border-white/5">
+                  <p className="text-[10px] text-gray-600 font-black uppercase tracking-widest mb-2">2 Weeks</p>
+                  <p className="text-xl font-black text-white">{forecast?.predicted_weight_2_weeks ?? '--'}</p>
+                </div>
+                <div className="bg-black rounded-2xl p-4 border border-white/5">
+                  <p className="text-[10px] text-gray-600 font-black uppercase tracking-widest mb-2">1 Month</p>
+                  <p className="text-xl font-black text-white">{forecast?.predicted_weight_1_month ?? '--'}</p>
+                </div>
+                <div className="bg-black rounded-2xl p-4 border border-white/5">
+                  <p className="text-[10px] text-gray-600 font-black uppercase tracking-widest mb-2">3 Months</p>
+                  <p className="text-xl font-black text-white">{forecast?.predicted_weight_3_months ?? '--'}</p>
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="bg-gray-950 border border-white/5 rounded-3xl p-6">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Live ML Signal</p>
+                  <h3 className="text-lg font-bold text-white mt-1">Consistency Probability</h3>
+                </div>
+                <span className="px-3 py-1.5 rounded-xl bg-blue-500/10 text-blue-400 text-xs font-black uppercase tracking-widest">Forecast</span>
+              </div>
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-4xl font-black text-white">{consistency?.consistency_probability ?? '--'}%</p>
+                  <p className="text-xs text-gray-500 mt-1">{consistency?.label || 'Waiting for enough data'}</p>
+                </div>
+                <div className="text-right text-xs text-gray-400 space-y-1">
+                  <p>Workout volume and streak</p>
+                  <p>drive this estimate</p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 bg-gray-950 border border-white/5 rounded-3xl p-6">
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h3 className="text-lg font-bold text-white">Weight Progression</h3>
-                  <p className="text-xs text-gray-500">Last 30 days</p>
+                  <p className="text-xs text-gray-500">Based on your saved logs</p>
                 </div>
                 <div className="flex gap-1">
                   {['Weekly', 'Monthly'].map(r => (
@@ -93,7 +257,7 @@ const Analytics = () => {
                   ))}
                 </div>
               </div>
-              <div className="h-[250px]"><ProgressChart data={weightData} color="rgb(34, 197, 94)" /></div>
+              <div className="h-[250px]"><ProgressChart data={weightData} labels={weightLabels} color="rgb(34, 197, 94)" /></div>
             </div>
             <div className="space-y-6">
               <div className="bg-gray-950 border border-white/5 rounded-3xl p-6">
@@ -109,8 +273,8 @@ const Analytics = () => {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-500"><TrendingUp size={18} /></div>
                     <div>
-                      <p className="text-xs text-gray-500">Strength Gain</p>
-                      <p className="text-base font-bold text-white">+12% <span className="text-xs text-blue-500 ml-1">avg lift</span></p>
+                      <p className="text-xs text-gray-500">Workouts Logged</p>
+                      <p className="text-base font-bold text-white">{history.length} <span className="text-xs text-blue-500 ml-1">sessions total</span></p>
                     </div>
                   </div>
                 </div>
@@ -126,13 +290,28 @@ const Analytics = () => {
           {/* Bottom Charts */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
-              { title: 'Muscle Distribution', data: [40, 45, 30, 55, 60, 45, 50], color: 'rgb(168, 85, 247)' },
-              { title: 'Consistency Score', data: [90, 85, 100, 80, 95, 100, 90], color: 'rgb(249, 115, 22)' },
-              { title: 'Activity Volume', data: [20, 60, 45, 90, 30, 75, 40], color: 'rgb(59, 130, 246)' },
+              {
+                title: 'Consistency Score',
+                data: consistencyHistory.map((item) => item.consistency_probability),
+                labels: consistencyHistory.map((item) => item.date),
+                color: 'rgb(249, 115, 22)'
+              },
+              {
+                title: 'Recovery Trend',
+                data: recoveryHistory.map((item) => item.recovery_score),
+                labels: recoveryHistory.map((item) => item.date),
+                color: 'rgb(168, 85, 247)'
+              },
+              {
+                title: 'Activity Volume',
+                data: history.slice(0, 7).reverse().map((session) => session.calories || 0),
+                labels: history.slice(0, 7).reverse().map((session) => new Date(session.created_at || session.date).toLocaleDateString([], { month: 'short', day: 'numeric' })),
+                color: 'rgb(59, 130, 246)'
+              },
             ].map((chart, i) => (
               <div key={i} className="bg-gray-950 border border-white/5 rounded-3xl p-6">
                 <h3 className="text-sm font-bold text-white mb-4">{chart.title}</h3>
-                <div className="h-[180px]"><ProgressChart data={chart.data} color={chart.color} /></div>
+                <div className="h-[180px]"><ProgressChart data={chart.data} labels={chart.labels} color={chart.color} /></div>
               </div>
             ))}
           </div>
@@ -169,7 +348,7 @@ const Analytics = () => {
                   ))}
                 </div>
               </div>
-              <div className="h-[280px]"><ProgressChart data={weightData} color="rgb(34, 197, 94)" /></div>
+              <div className="h-[280px]"><ProgressChart data={weightData} labels={weightLabels} color="rgb(34, 197, 94)" /></div>
             </div>
             <div className="space-y-4">
               <button onClick={() => setShowLogModal(true)}

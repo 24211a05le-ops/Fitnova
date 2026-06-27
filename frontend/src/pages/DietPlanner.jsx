@@ -15,7 +15,7 @@ import {
   Settings, 
   Apple 
 } from 'lucide-react';
-import { generateDiet } from '../services/dietService';
+import { generateDiet, getMealPlans } from '../services/dietService';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -52,29 +52,48 @@ const DietPlanner = () => {
     mode: 'onChange',
     defaultValues: {
       weight: user?.weight || 75,
-      fitnessGoal: user?.fitnessGoal || 'Weight Loss',
+      fitnessGoal: user?.fitness_goal || user?.fitnessGoal || 'Weight Loss',
       dietPreference: 'High Protein',
     }
   });
 
-  // Pre-load a default diet plan for high fidelity visual presentation on first loading
   useEffect(() => {
-    const fetchDefault = async () => {
+    const loadPlan = async () => {
       setGenerating(true);
       try {
-        const plan = await generateDiet({
-          weight: user?.weight || 75,
-          fitnessGoal: user?.fitnessGoal || 'Weight Loss',
-          dietPreference: 'High Protein'
-        });
-        setDietPlan(plan);
+        const savedPlans = await getMealPlans();
+        if ((savedPlans.plans || []).length > 0) {
+          const latestPlan = savedPlans.plans[0];
+          setDietPlan({
+            calories: latestPlan.calorie_target,
+            macros: {
+              protein: latestPlan.macros?.proteins,
+              carbs: latestPlan.macros?.carbs,
+              fats: latestPlan.macros?.fats,
+            },
+            meals: [
+              { name: 'Breakfast', time: '08:00 AM', items: [latestPlan.breakfast] },
+              { name: 'Lunch', time: '01:00 PM', items: [latestPlan.lunch] },
+              { name: 'Snack', time: '04:30 PM', items: [latestPlan.snacks] },
+              { name: 'Dinner', time: '08:30 PM', items: [latestPlan.dinner] },
+            ],
+            tips: [latestPlan.meal_timing].filter(Boolean),
+          });
+        } else {
+          const plan = await generateDiet({
+            weight: user?.weight || 75,
+            fitnessGoal: user?.fitness_goal || user?.fitnessGoal || 'Weight Loss',
+            dietPreference: 'High Protein'
+          });
+          setDietPlan(plan);
+        }
       } catch (err) {
         console.error(err);
       } finally {
         setGenerating(false);
       }
     };
-    fetchDefault();
+    loadPlan();
   }, [user]);
 
   const handleGenerate = async (data) => {

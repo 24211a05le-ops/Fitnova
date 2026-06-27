@@ -6,23 +6,11 @@ import api from './api';
  * @returns {Promise<Object>} Saved workout record.
  */
 export const saveWorkout = async (workoutData) => {
-  try {
-    const response = await api.post('/workouts', workoutData);
-    return response.data.data;
-  } catch (error) {
-    console.warn('Backend API connection failed, simulated local workout sync.');
-    
-    // Simulate network latency
-    await new Promise((resolve) => setTimeout(resolve, 600));
+  const response = await api.post('/workouts', workoutData);
+  return response.data.data;
+};
 
-    return {
-      success: true,
-      workout: {
-        id: Math.floor(Math.random() * 1000000),
-        ...workoutData,
-        synced: false,
-        date: new Date().toISOString(),
-      },
-    };
-  }
+export const getWorkoutSessions = async () => {
+  const response = await api.get('/workouts?view=sessions');
+  return response.data.data;
 };

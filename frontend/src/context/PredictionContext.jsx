@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getPrediction, getProgress } from '../services/predictionService';
+import { getPrediction, getProgress, saveProgressLog } from '../services/predictionService';
 import { useAuth } from './AuthContext';
 
 const PredictionContext = createContext();
@@ -28,26 +28,33 @@ export const PredictionProvider = ({ children }) => {
     fetchHistory();
   }, [user]);
 
+  const refreshProgressLogs = async () => {
+    if (!user) {
+      setProgressLogs([]);
+      return;
+    }
+
+    const logs = await getProgress();
+    setProgressLogs(logs);
+  };
+
   const predictBodyTransformation = async (bodyStats) => {
     setLoading(true);
     setError(null);
     try {
       const data = await getPrediction(bodyStats);
       setPredictions(data);
-      
-      // Optionally add a new log point to keep visual logs up to date
-      const newLog = {
-        id: Date.now(),
+      await saveProgressLog({
         date: new Date().toISOString().split('T')[0],
         weight: parseFloat(bodyStats.weight),
-        bodyFat: parseFloat(bodyStats.bodyFat) || 16.0,
-        muscleMass: parseFloat(bodyStats.muscleMass) || 34.0,
-        chest: parseFloat(bodyStats.chest) || 104,
-        waist: parseFloat(bodyStats.waist) || 82,
-        biceps: parseFloat(bodyStats.biceps) || 41,
-      };
-      
-      setProgressLogs((prev) => [...prev.filter(l => l.date !== newLog.date), newLog]);
+        body_fat: parseFloat(bodyStats.bodyFat),
+        muscle_mass: parseFloat(bodyStats.muscleMass || 0) || null,
+        chest: parseFloat(bodyStats.chest || 0) || null,
+        waist: parseFloat(bodyStats.waist || 0) || null,
+        biceps: parseFloat(bodyStats.biceps || 0) || null,
+        thighs: parseFloat(bodyStats.thighs || 0) || null,
+      });
+      await refreshProgressLogs();
       return data;
     } catch (err) {
       const errMsg = err.response?.data?.message || err.message || 'Prediction analysis failed';
@@ -65,6 +72,7 @@ export const PredictionProvider = ({ children }) => {
         progressLogs,
         loading,
         error,
+        refreshProgressLogs,
         predictBodyTransformation,
       }}
     >

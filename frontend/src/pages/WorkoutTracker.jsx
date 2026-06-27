@@ -3,15 +3,8 @@ import { Plus, Save, Timer, Dumbbell, Trash2, CheckCircle2, Loader2, AlertCircle
 import { useWorkout } from '../context/WorkoutContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-
-const EXERCISE_PRESETS = {
-  Chest: ['Bench Press', 'Incline DB Press', 'Cable Flyes', 'Push-Ups', 'Dips'],
-  Back: ['Deadlifts', 'Pull-Ups', 'Barbell Rows', 'Lat Pulldown', 'Cable Row'],
-  Legs: ['Squats', 'Leg Press', 'Romanian DL', 'Lunges', 'Leg Curl'],
-  Shoulders: ['Overhead Press', 'Lateral Raises', 'Face Pulls', 'Arnold Press'],
-  Arms: ['Barbell Curls', 'Tricep Pushdown', 'Hammer Curls', 'Skull Crushers'],
-  Core: ['Plank', 'Leg Raises', 'Cable Crunches', 'Russian Twists'],
-};
+import { predictProgressiveOverload } from '../services/mlService';
+import { getExerciseLibraryData } from '../services/appService';
 
 const WorkoutTracker = () => {
   const { exercises, loading, successMessage, addExercise, removeExercise, addSet, updateSet, toggleSetComplete, saveCurrentWorkout } = useWorkout();
@@ -22,6 +15,7 @@ const WorkoutTracker = () => {
   const [showComplete, setShowComplete] = useState(false);
   const [addCategory, setAddCategory] = useState('Chest');
   const [customName, setCustomName] = useState('');
+  const [exercisePresets, setExercisePresets] = useState({});
 
   // Rest Timer
   const [restTimer, setRestTimer] = useState(0);
@@ -31,6 +25,8 @@ const WorkoutTracker = () => {
   // Sync form
   const [syncTitle, setSyncTitle] = useState('');
   const [syncDuration, setSyncDuration] = useState(45);
+  const [mlRecommendation, setMlRecommendation] = useState(null);
+  const [mlLoading, setMlLoading] = useState(false);
 
   // Workout timer
   const [workoutTime, setWorkoutTime] = useState(0);
@@ -57,6 +53,79 @@ const WorkoutTracker = () => {
   useEffect(() => {
     if (exercises.length > 0 && !workoutRunning) setWorkoutRunning(true);
   }, [exercises.length]);
+
+  useEffect(() => {
+    const loadExercisePresets = async () => {
+      try {
+        const data = await getExerciseLibraryData();
+        const grouped = (data.exercises || []).reduce((acc, exercise) => {
+          if (!acc[exercise.muscle]) {
+            acc[exercise.muscle] = [];
+          }
+          acc[exercise.muscle].push(exercise.name);
+          return acc;
+        }, {});
+        setExercisePresets(grouped);
+        if (!grouped[addCategory]) {
+          const [firstCategory] = Object.keys(grouped);
+          if (firstCategory) {
+            setAddCategory(firstCategory);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load workout presets:', error);
+      }
+    };
+
+    loadExercisePresets();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const updateMlRecommendation = async () => {
+      const targetExercise = exercises[exercises.length - 1];
+      if (!targetExercise || !targetExercise.sets || targetExercise.sets.length === 0) {
+        setMlRecommendation(null);
+        return;
+      }
+
+      const lastSet = targetExercise.sets[targetExercise.sets.length - 1];
+      const previousSet = targetExercise.sets[targetExercise.sets.length - 2];
+      const exerciseTrend = previousSet ? (lastSet.weight - previousSet.weight) / 10 : 0;
+
+      try {
+        setMlLoading(true);
+        const recommendation = await predictProgressiveOverload({
+          prev_weight: lastSet.weight || 0,
+          reps_completed: lastSet.reps || 0,
+          sets_completed: targetExercise.sets.length,
+          exercise_trend: exerciseTrend,
+        });
+
+        if (!active) return;
+        setMlRecommendation({
+          ...recommendation,
+          exercise_name: targetExercise.name,
+        });
+      } catch (error) {
+        if (!active) return;
+        console.error('Failed to load overload recommendation:', error);
+        setMlRecommendation(null);
+      } finally {
+        if (active) {
+          setMlLoading(false);
+        }
+      }
+    };
+
+    const timer = setTimeout(updateMlRecommendation, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [exercises]);
 
   const formatTime = (s) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
@@ -174,6 +243,32 @@ const WorkoutTracker = () => {
           )}
         </div>
       </header>
+
+      <div className="bg-gray-950 border border-white/5 rounded-[32px] p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+        <div>
+          <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Live ML Recommendation</p>
+          <h3 className="text-xl font-bold text-white mt-1">Progressive Overload Forecast</h3>
+          <p className="text-sm text-gray-500 mt-2">{mlRecommendation?.exercise_name || 'Track a set to generate the next workout suggestion.'}</p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 min-w-0">
+          <div className="bg-black border border-white/5 rounded-2xl p-4">
+            <p className="text-[10px] text-gray-600 font-black uppercase tracking-widest mb-2">Action</p>
+            <p className="text-sm font-black text-white">{mlLoading ? 'Updating' : (mlRecommendation?.suggested_action || '—')}</p>
+          </div>
+          <div className="bg-black border border-white/5 rounded-2xl p-4">
+            <p className="text-[10px] text-gray-600 font-black uppercase tracking-widest mb-2">Weight</p>
+            <p className="text-sm font-black text-white">{mlRecommendation?.recommended_weight ?? '--'} kg</p>
+          </div>
+          <div className="bg-black border border-white/5 rounded-2xl p-4">
+            <p className="text-[10px] text-gray-600 font-black uppercase tracking-widest mb-2">Reps</p>
+            <p className="text-sm font-black text-white">{mlRecommendation?.recommended_reps ?? '--'}</p>
+          </div>
+          <div className="bg-black border border-white/5 rounded-2xl p-4">
+            <p className="text-[10px] text-gray-600 font-black uppercase tracking-widest mb-2">Sets</p>
+            <p className="text-sm font-black text-white">{mlRecommendation?.recommended_sets ?? '--'}</p>
+          </div>
+        </div>
+      </div>
 
       {/* Rest Timer Bar */}
       <AnimatePresence>
@@ -310,7 +405,7 @@ const WorkoutTracker = () => {
               </div>
               {/* Category Tabs */}
               <div className="flex gap-1.5 overflow-x-auto mb-4 pb-1 scrollbar-hide">
-                {Object.keys(EXERCISE_PRESETS).map(cat => (
+                {Object.keys(exercisePresets).map(cat => (
                   <button key={cat} onClick={() => setAddCategory(cat)}
                     className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider whitespace-nowrap transition-all ${
                       addCategory === cat ? 'bg-green-500 text-black' : 'bg-gray-800 text-gray-500 hover:text-white'
@@ -319,12 +414,17 @@ const WorkoutTracker = () => {
               </div>
               {/* Preset Exercises */}
               <div className="space-y-1.5 mb-4 max-h-48 overflow-y-auto">
-                {EXERCISE_PRESETS[addCategory].map(name => (
+                {(exercisePresets[addCategory] || []).map(name => (
                   <button key={name} onClick={() => handleAddPreset(name)}
                     className="w-full text-left p-3 rounded-xl bg-black border border-white/5 hover:border-green-500/30 text-sm font-bold text-gray-300 hover:text-white transition-all flex items-center gap-3">
                     <Dumbbell size={14} className="text-gray-600" /> {name}
                   </button>
                 ))}
+                {(!exercisePresets[addCategory] || exercisePresets[addCategory].length === 0) && (
+                  <div className="rounded-xl border border-white/5 bg-black p-3 text-sm text-gray-500">
+                    No preset exercises available for this category yet.
+                  </div>
+                )}
               </div>
               {/* Custom */}
               <div className="border-t border-white/5 pt-4">

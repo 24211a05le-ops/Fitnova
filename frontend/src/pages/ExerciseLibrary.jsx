@@ -3,53 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { Search, Filter, Dumbbell, Star, TrendingUp, ChevronRight, Sparkles, Play, Info, X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { searchExercisesSmart } from '../services/aiService';
+import { getExerciseLibraryData } from '../services/appService';
 
-
-const EXERCISES = [
-  // Chest
-  { name: 'Barbell Bench Press', muscle: 'Chest', difficulty: 'Intermediate', equipment: 'Gym', sets: '4x10', popular: true },
-  { name: 'Incline Dumbbell Press', muscle: 'Chest', difficulty: 'Intermediate', equipment: 'Gym', sets: '3x12' },
-  { name: 'Push-Ups', muscle: 'Chest', difficulty: 'Beginner', equipment: 'Home', sets: '3x15', popular: true },
-  { name: 'Cable Flyes', muscle: 'Chest', difficulty: 'Intermediate', equipment: 'Gym', sets: '3x15' },
-  { name: 'Dips', muscle: 'Chest', difficulty: 'Advanced', equipment: 'Gym', sets: '3x12' },
-  // Back
-  { name: 'Deadlift', muscle: 'Back', difficulty: 'Advanced', equipment: 'Gym', sets: '4x8', popular: true },
-  { name: 'Pull-Ups', muscle: 'Back', difficulty: 'Intermediate', equipment: 'Home', sets: '4x10' },
-  { name: 'Barbell Rows', muscle: 'Back', difficulty: 'Intermediate', equipment: 'Gym', sets: '4x10' },
-  { name: 'Lat Pulldown', muscle: 'Back', difficulty: 'Beginner', equipment: 'Gym', sets: '3x12', popular: true },
-  { name: 'Seated Cable Row', muscle: 'Back', difficulty: 'Beginner', equipment: 'Gym', sets: '3x12' },
-  // Legs
-  { name: 'Barbell Squats', muscle: 'Legs', difficulty: 'Intermediate', equipment: 'Gym', sets: '4x10', popular: true },
-  { name: 'Leg Press', muscle: 'Legs', difficulty: 'Beginner', equipment: 'Gym', sets: '3x12' },
-  { name: 'Romanian Deadlift', muscle: 'Legs', difficulty: 'Intermediate', equipment: 'Gym', sets: '3x10' },
-  { name: 'Walking Lunges', muscle: 'Legs', difficulty: 'Beginner', equipment: 'Home', sets: '3x20' },
-  { name: 'Leg Curl', muscle: 'Legs', difficulty: 'Beginner', equipment: 'Gym', sets: '3x12' },
-  // Shoulders
-  { name: 'Overhead Press', muscle: 'Shoulders', difficulty: 'Intermediate', equipment: 'Gym', sets: '4x10', popular: true },
-  { name: 'Lateral Raises', muscle: 'Shoulders', difficulty: 'Beginner', equipment: 'Gym', sets: '3x15' },
-  { name: 'Face Pulls', muscle: 'Shoulders', difficulty: 'Beginner', equipment: 'Gym', sets: '3x15' },
-  { name: 'Arnold Press', muscle: 'Shoulders', difficulty: 'Intermediate', equipment: 'Gym', sets: '3x12' },
-  // Arms
-  { name: 'Barbell Curls', muscle: 'Arms', difficulty: 'Beginner', equipment: 'Gym', sets: '3x12' },
-  { name: 'Tricep Pushdowns', muscle: 'Arms', difficulty: 'Beginner', equipment: 'Gym', sets: '3x15', popular: true },
-  { name: 'Hammer Curls', muscle: 'Arms', difficulty: 'Beginner', equipment: 'Gym', sets: '3x12' },
-  { name: 'Skull Crushers', muscle: 'Arms', difficulty: 'Intermediate', equipment: 'Gym', sets: '3x10' },
-  { name: 'Diamond Push-Ups', muscle: 'Arms', difficulty: 'Intermediate', equipment: 'Home', sets: '3x12' },
-  // Core
-  { name: 'Plank Hold', muscle: 'Core', difficulty: 'Beginner', equipment: 'Home', sets: '3x60s', popular: true },
-  { name: 'Hanging Leg Raises', muscle: 'Core', difficulty: 'Advanced', equipment: 'Gym', sets: '3x12' },
-  { name: 'Cable Crunches', muscle: 'Core', difficulty: 'Intermediate', equipment: 'Gym', sets: '3x15' },
-  { name: 'Russian Twists', muscle: 'Core', difficulty: 'Beginner', equipment: 'Home', sets: '3x20' },
-  { name: 'Ab Wheel Rollout', muscle: 'Core', difficulty: 'Advanced', equipment: 'Gym', sets: '3x10' },
-];
-
-const AI_RECOMMENDATIONS = [
-  { name: 'Barbell Bench Press', muscle: 'Chest', reason: 'Based on your muscle gain goal' },
-  { name: 'Barbell Squats', muscle: 'Legs', reason: 'Compound movement for maximum growth' },
-  { name: 'Deadlift', muscle: 'Back', reason: 'Recommended for overall strength' },
-];
-
-const CATEGORIES = ['All', 'Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'];
 const DIFFICULTIES = ['All Levels', 'Beginner', 'Intermediate', 'Advanced'];
 const LOCATIONS = ['All', 'Gym', 'Home'];
 
@@ -64,7 +19,26 @@ const ExerciseLibrary = () => {
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [selectedExercise, setSelectedExercise] = useState(null);
   const [backendExercises, setBackendExercises] = useState([]);
+  const [exerciseCatalog, setExerciseCatalog] = useState([]);
+  const [exerciseRecommendations, setExerciseRecommendations] = useState([]);
+  const [popularExercises, setPopularExercises] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const categories = ['All', ...new Set(exerciseCatalog.map((exercise) => exercise.muscle))];
+
+  useEffect(() => {
+    const loadLibrary = async () => {
+      try {
+        const data = await getExerciseLibraryData();
+        setExerciseCatalog(data.exercises || []);
+        setExerciseRecommendations(data.recommendations || []);
+        setPopularExercises(data.popular || []);
+      } catch (error) {
+        console.error('Failed to load exercise catalog:', error);
+      }
+    };
+
+    loadLibrary();
+  }, []);
 
   // Sync URL search params to local searchQuery state
   useEffect(() => {
@@ -103,7 +77,7 @@ const ExerciseLibrary = () => {
 
   const filtered = useMemo(() => {
     // Get local filtered exercises
-    const localFiltered = EXERCISES.filter(ex => {
+    const localFiltered = exerciseCatalog.filter(ex => {
       if (activeCategory !== 'All' && ex.muscle !== activeCategory) return false;
       if (difficulty !== 'All Levels' && ex.difficulty !== difficulty) return false;
       if (location !== 'All' && ex.equipment !== location) return false;
@@ -134,9 +108,9 @@ const ExerciseLibrary = () => {
     });
 
     return combined;
-  }, [activeCategory, difficulty, location, searchQuery, backendExercises]);
+  }, [activeCategory, difficulty, location, searchQuery, backendExercises, exerciseCatalog]);
 
-  const popular = EXERCISES.filter(e => e.popular);
+  const popular = popularExercises.length > 0 ? popularExercises : exerciseCatalog.filter(e => e.popular);
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-10">
@@ -144,7 +118,7 @@ const ExerciseLibrary = () => {
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">Exercise Library</h1>
-          <p className="text-gray-500 mt-1 text-sm">{EXERCISES.length} exercises across {CATEGORIES.length - 1} muscle groups</p>
+          <p className="text-gray-500 mt-1 text-sm">{exerciseCatalog.length} exercises across {Math.max(categories.length - 1, 0)} muscle groups</p>
         </div>
         <div className="w-full md:w-80 relative group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-green-500 transition-colors" size={18} />
@@ -162,7 +136,7 @@ const ExerciseLibrary = () => {
       <div className="space-y-4">
         {/* Category Pills */}
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-          {CATEGORIES.map(cat => (
+          {categories.map(cat => (
             <button key={cat} onClick={() => setActiveCategory(cat)}
               className={`px-5 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                 activeCategory === cat ? 'bg-green-500 text-black shadow-lg shadow-green-500/20' : 'bg-gray-900 text-gray-500 hover:text-white border border-gray-800'
@@ -202,10 +176,10 @@ const ExerciseLibrary = () => {
             <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest ml-2">Personalized for you</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {AI_RECOMMENDATIONS.map((ex, i) => (
+            {exerciseRecommendations.map((ex, i) => (
               <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
                 className="bg-gradient-to-br from-yellow-500/5 to-orange-500/5 border border-yellow-500/10 rounded-2xl p-5 hover:border-yellow-500/30 transition-all cursor-pointer group"
-                onClick={() => setSelectedExercise(EXERCISES.find(e => e.name === ex.name))}>
+                onClick={() => setSelectedExercise(exerciseCatalog.find(e => e.name === ex.name))}>
                 <div className="flex items-center gap-2 mb-2">
                   <Star size={14} className="text-yellow-500" />
                   <span className="text-[10px] font-bold text-yellow-500/70 uppercase tracking-wider">{ex.muscle}</span>
@@ -214,6 +188,11 @@ const ExerciseLibrary = () => {
                 <p className="text-xs text-gray-500 mt-1">{ex.reason}</p>
               </motion.div>
             ))}
+            {exerciseRecommendations.length === 0 && (
+              <div className="sm:col-span-3 bg-gray-950 border border-white/5 rounded-2xl p-5 text-sm text-gray-500">
+                Generate a workout plan or log more sessions to unlock tailored recommendations.
+              </div>
+            )}
           </div>
         </section>
       )}

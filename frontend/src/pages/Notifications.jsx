@@ -1,27 +1,44 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { MdEmojiEvents, MdFlashOn, MdWaterDrop, MdInfo } from 'react-icons/md';
+import { getAppOverview } from '../services/appService';
+
+const ICON_MAP = {
+  Workout: <MdFlashOn />,
+  Tracking: <MdWaterDrop />,
+  Nutrition: <MdInfo />,
+  'AI Coach': <MdEmojiEvents />,
+};
 
 const Notifications = () => {
+  const [notifications, setNotifications] = useState([]);
+
+  useEffect(() => {
+    const loadNotifications = async () => {
+      try {
+        const overview = await getAppOverview();
+        setNotifications(overview.notifications || []);
+      } catch (error) {
+        console.error('Failed to load notifications:', error);
+      }
+    };
+
+    loadNotifications();
+  }, []);
+
   return (
     <div className="space-y-10 max-w-4xl mx-auto">
       <header className="flex justify-between items-end">
         <div>
           <h1 className="text-4xl font-bold text-white tracking-tight">Activity Center</h1>
-          <p className="text-gray-400 mt-2 text-lg">Stay updated with Fitnova's latest achievements.</p>
+          <p className="text-gray-400 mt-2 text-lg">Recent app events based on your saved workouts, logs, and AI activity.</p>
         </div>
-        <button className="text-sm font-bold text-gray-500 hover:text-white transition-colors">Mark all as read</button>
       </header>
 
       <div className="space-y-4">
-        {[
-          { title: 'New PR Achievement!', desc: 'You broke your Bench Press record with 85kg.', icon: <MdEmojiEvents />, color: 'bg-yellow-500/10 text-yellow-500', time: '2m ago', category: 'Achievement' },
-          { title: 'Workout Reminder', desc: 'Leg Day starts in 15 minutes.', icon: <MdFlashOn />, color: 'bg-green-500/10 text-green-500', time: '12m ago', category: 'Routine' },
-          { title: 'Hydration Alert', desc: "You're 2 glasses behind your daily water goal.", icon: <MdWaterDrop />, color: 'bg-blue-500/10 text-blue-500', time: '1h ago', category: 'Health' },
-          { title: 'System Update', desc: 'Fitnova v1.0.4 is now live.', icon: <MdInfo />, color: 'bg-purple-500/10 text-purple-500', time: '5h ago', category: 'System' },
-        ].map((notif, i) => (
-          <div key={i} className="bg-gray-950 border border-gray-900 rounded-[32px] p-8 flex gap-8 items-start hover:border-gray-800 transition-all group">
+        {notifications.map((notif, index) => (
+          <div key={`${notif.title}-${index}`} className="bg-gray-950 border border-gray-900 rounded-[32px] p-8 flex gap-8 items-start hover:border-gray-800 transition-all group">
             <div className={`w-16 h-16 rounded-[24px] flex items-center justify-center text-2xl shrink-0 ${notif.color}`}>
-              {notif.icon}
+              {ICON_MAP[notif.category] || <MdInfo />}
             </div>
             <div className="flex-1">
               <div className="flex justify-between items-start mb-2">
@@ -35,6 +52,11 @@ const Notifications = () => {
             </div>
           </div>
         ))}
+        {notifications.length === 0 && (
+          <div className="bg-gray-950 border border-gray-900 rounded-[32px] p-8 text-gray-500">
+            Notifications will appear once you start logging workouts, progress, or AI plans.
+          </div>
+        )}
       </div>
     </div>
   );
