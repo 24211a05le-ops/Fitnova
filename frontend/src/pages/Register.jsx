@@ -68,7 +68,6 @@ const Register = () => {
   const [step, setStep] = useState(1);
   const totalSteps = 3;
   const [apiError, setApiError] = useState(null);
-  const [success, setSuccess] = useState(false);
 
   const {
     register: formRegister,
@@ -98,16 +97,10 @@ const Register = () => {
 
   const onSubmit = async (data) => {
     setApiError(null);
-    setSuccess(false);
     try {
       console.log('Register: Creating account for:', data.email);
-      await signup(data);
-      setSuccess(true);
-      
-      // Navigate to onboarding screen after short success delay
-      setTimeout(() => {
-        navigate('/onboarding');
-      }, 1000);
+      const createdUser = await signup(data);
+      navigate(createdUser?.is_onboarded ? '/dashboard' : '/onboarding', { replace: true });
     } catch (err) {
       console.error('Registration Error:', err.message);
       setApiError(err.message || 'Registration failed. Please check your network and details.');
@@ -150,18 +143,6 @@ const Register = () => {
           >
             <AlertCircle size={18} className="shrink-0" />
             <span>{apiError}</span>
-          </motion.div>
-        )}
-
-        {/* Success Banner */}
-        {success && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 p-4 bg-green-500/10 border border-green-500/20 rounded-2xl flex items-center gap-3 text-green-400 text-sm font-medium"
-          >
-            <Loader2 size={18} className="animate-spin shrink-0" />
-            <span>Account created! Starting onboarding session...</span>
           </motion.div>
         )}
 

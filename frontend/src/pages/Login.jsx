@@ -23,7 +23,6 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [apiError, setApiError] = useState(null);
-  const [success, setSuccess] = useState(false);
 
   const {
     register,
@@ -36,16 +35,10 @@ const Login = () => {
 
   const onSubmit = async (data) => {
     setApiError(null);
-    setSuccess(false);
     try {
       console.log('Login: Form submitted, calling login auth context:', data.email);
-      await login(data.email, data.password);
-      setSuccess(true);
-      
-      // Navigate to dashboard after brief delay for smooth UI feedback
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 800);
+      const authenticatedUser = await login(data.email, data.password);
+      navigate(authenticatedUser?.is_onboarded ? '/dashboard' : '/onboarding', { replace: true });
     } catch (err) {
       console.error('Login Error:', err.message);
       setApiError(err.message || 'Invalid email or password. Try admin@fitnova.com');
@@ -85,18 +78,6 @@ const Login = () => {
           >
             <AlertCircle size={18} className="shrink-0" />
             <span>{apiError}</span>
-          </motion.div>
-        )}
-
-        {/* Success Banner */}
-        {success && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 p-4 bg-green-500/10 border border-green-500/20 rounded-2xl flex items-center gap-3 text-green-400 text-sm font-medium"
-          >
-            <Loader2 size={18} className="animate-spin shrink-0" />
-            <span>Success! Redirecting to your fitness hub...</span>
           </motion.div>
         )}
 

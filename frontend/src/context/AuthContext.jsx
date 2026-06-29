@@ -3,76 +3,112 @@ import { loginUser, registerUser, verifySession } from '../services/authService'
 
 const AuthContext = createContext();
 
+const getStorageItem = (key) => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  return window.localStorage.getItem(key);
+};
+
+const readStoredToken = () => getStorageItem('fitnova_token');
+
+const readStoredUser = () => {
+  try {
+    const storedUser = getStorageItem('fitnova_user');
+    return storedUser ? JSON.parse(storedUser) : null;
+  } catch (error) {
+    console.error('Failed to parse stored user session:', error);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('fitnova_user');
+    }
+    return null;
+  }
+};
+
+const persistAuthSession = (user, token) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.setItem('fitnova_user', JSON.stringify(user));
+  window.localStorage.setItem('fitnova_token', token);
+};
+
+const clearAuthSession = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.removeItem('fitnova_user');
+  window.localStorage.removeItem('fitnova_token');
+};
+
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => (readStoredToken() ? readStoredUser() : null));
+  const [loading, setLoading] = useState(() => {
+    const token = readStoredToken();
+    return Boolean(token) && !readStoredUser();
+  });
   const [error, setError] = useState(null);
 
   useEffect(() => {
     const checkAuth = async () => {
+      const token = readStoredToken();
+      if (!token) {
+        clearAuthSession();
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
       try {
-        const token = localStorage.getItem('fitnova_token');
-        if (token) {
-          // Verify with backend
-          const data = await verifySession();
-          setUser(data.user);
-          localStorage.setItem('fitnova_user', JSON.stringify(data.user));
-        } else {
-          setUser(null);
+        const data = await verifySession();
+        setUser(data.user);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('fitnova_user', JSON.stringify(data.user));
         }
       } catch (err) {
         console.error('Error loading auth credentials:', err);
         setUser(null);
-        localStorage.removeItem('fitnova_user');
-        localStorage.removeItem('fitnova_token');
+        clearAuthSession();
       } finally {
-        setTimeout(() => setLoading(false), 500);
+        setLoading(false);
       }
     };
+
     checkAuth();
   }, []);
 
   const login = async (email, password) => {
-    setLoading(true);
     setError(null);
     try {
       const data = await loginUser({ email, password });
       setUser(data.user);
-      localStorage.setItem('fitnova_user', JSON.stringify(data.user));
-      localStorage.setItem('fitnova_token', data.token);
+      persistAuthSession(data.user, data.token);
       return data.user;
     } catch (err) {
       const errMsg = err.response?.data?.message || err.message || 'Login failed';
       setError(errMsg);
       throw new Error(errMsg);
-    } finally {
-      setLoading(false);
     }
   };
 
   const register = async (userData) => {
-    setLoading(true);
     setError(null);
     try {
       const data = await registerUser(userData);
       setUser(data.user);
-      localStorage.setItem('fitnova_user', JSON.stringify(data.user));
-      localStorage.setItem('fitnova_token', data.token);
+      persistAuthSession(data.user, data.token);
       return data.user;
     } catch (err) {
       const errMsg = err.response?.data?.message || err.message || 'Registration failed';
       setError(errMsg);
       throw new Error(errMsg);
-    } finally {
-      setLoading(false);
     }
   };
 
   const logout = () => {
     setUser(null);
     setError(null);
-    localStorage.removeItem('fitnova_user');
-    localStorage.removeItem('fitnova_token');
+    clearAuthSession();
   };
 
   return (
