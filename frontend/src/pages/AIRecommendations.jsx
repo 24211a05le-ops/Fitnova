@@ -4,7 +4,7 @@ import { Sparkles, Brain, Zap, MessageSquare, Send, Loader2, ArrowRight, ArrowLe
 import { useAuth } from '../context/AuthContext';
 import { useWorkout } from '../context/WorkoutContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { sendAIChatMessage, getAIChatHistory, generateAIWorkout, getAIWorkoutPlans } from '../services/aiService';
+import { sendAIChatMessage, getAIChatHistory, generateAIWorkout, getAIWorkoutPlans, getDashboardWidgets } from '../services/aiService';
 
 const AIRecommendations = () => {
   const { user } = useAuth();
@@ -17,7 +17,7 @@ const AIRecommendations = () => {
   const [generatedPlan, setGeneratedPlan] = useState(null);
   const [expandedDay, setExpandedDay] = useState(null);
   const [history, setHistory] = useState([]);
-  
+
   // ML Integration States
   const [recoveryData, setRecoveryData] = useState({ score: 82, status: 'High Readiness', color: 'green' });
 
@@ -32,19 +32,13 @@ const AIRecommendations = () => {
   useEffect(() => {
     const loadDiagnostics = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const response = await fetch('/api/ai/dashboard-widgets', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const res = await response.json();
-        if (res.success && res.data) {
-          if (res.data.recovery_status) {
-            setRecoveryData({
-              score: res.data.recovery_status.score || 80,
-              status: res.data.recovery_status.label || 'Moderate Recovery',
-              color: res.data.recovery_status.color || 'green'
-            });
-          }
+        const res = await getDashboardWidgets();
+        if (res && res.recovery_status) {
+          setRecoveryData({
+            score: res.recovery_status.score || 80,
+            status: res.recovery_status.label || 'Moderate Recovery',
+            color: res.recovery_status.color || 'green'
+          });
         }
       } catch (err) {
         console.error("Could not load dashboard metrics:", err);
@@ -62,7 +56,7 @@ const AIRecommendations = () => {
     },
     {
       title: 'Workout Readiness',
-      desc: recoveryData.score < 50 
+      desc: recoveryData.score < 50
         ? `Recovery is low (${recoveryData.score}/100). Rest or active light training is suggested.`
         : `Ready to train (${recoveryData.score}/100). Excellent state for progressive load.`,
       icon: <Activity size={16} className="text-green-400" />,
@@ -107,7 +101,7 @@ const AIRecommendations = () => {
         const list = res.plans || [];
         if (list.length > 0) {
           const data = list[0]; // get the latest saved plan
-          
+
           const planSource = data.plan_data && data.plan_data.weekly_split ? data.plan_data : data;
           const split = planSource.weekly_split || {};
           let planDays = [];
@@ -177,10 +171,20 @@ const AIRecommendations = () => {
           const cardioText = data.progression_notes || planSource.cardio_plan || "N/A";
           const goalText = data.goal || planSource.goal || "General Fitness";
 
+          const dayOrder = {
+            'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4,
+            'friday': 5, 'saturday': 6, 'sunday': 7
+          };
+          planDays.sort((a, b) => {
+            const orderA = dayOrder[a.day.toLowerCase()] || 99;
+            const orderB = dayOrder[b.day.toLowerCase()] || 99;
+            return orderA - orderB;
+          });
+
           setGeneratedPlan({
             goal: goalText,
             plan: planDays,
-            rationale: `This customized program targets your goal of {goalText}. Cardio Recommendation: {cardioText}.`,
+            rationale: `This customized program targets your goal of ${goalText}. Cardio Recommendation: ${cardioText}.`,
             progression: rationaleText
           });
           setGenStep(4);
@@ -248,13 +252,13 @@ const AIRecommendations = () => {
       } else if (Array.isArray(planSource.exercises)) {
         const exercises = planSource.exercises;
         const dayKeys = Object.keys(split);
-        
+
         dayKeys.forEach((dayKey, idx) => {
           const dayFocus = split[dayKey];
           const exercisesPerDay = Math.ceil(exercises.length / dayKeys.length);
           const startIdx = idx * exercisesPerDay;
           const endIdx = startIdx + exercisesPerDay;
-          
+
           const dayExercises = exercises.slice(startIdx, endIdx).map(ex => ({
             name: ex.name || ex.exercise_name || "Exercise",
             sets: ex.sets || 3,
@@ -271,6 +275,16 @@ const AIRecommendations = () => {
           });
         });
       }
+
+      const dayOrder = {
+        'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4,
+        'friday': 5, 'saturday': 6, 'sunday': 7
+      };
+      planDays.sort((a, b) => {
+        const orderA = dayOrder[a.day.toLowerCase()] || 99;
+        const orderB = dayOrder[b.day.toLowerCase()] || 99;
+        return orderA - orderB;
+      });
 
       const rationaleText = data.rationale || planSource.progression_strategy || "Focus on progressive overload.";
       const cardioText = data.progression_notes || planSource.cardio_plan || "N/A";
@@ -346,9 +360,8 @@ const AIRecommendations = () => {
       {/* Recovery Alert Status Banner */}
       <div className="p-4 bg-gray-950 border border-white/5 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${
-            recoveryData.score >= 75 ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'
-          }`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${recoveryData.score >= 75 ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'
+            }`}>
             {recoveryData.score}%
           </div>
           <div>
@@ -501,7 +514,7 @@ const AIRecommendations = () => {
                           </div>
                           <ChevronDown size={16} className={`text-gray-600 transition-transform ${expandedDay === i ? 'rotate-180' : ''}`} />
                         </button>
-                        
+
                         <AnimatePresence>
                           {expandedDay === i && (
                             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
@@ -516,7 +529,7 @@ const AIRecommendations = () => {
                                     <p className="leading-relaxed">{day.warmUp}</p>
                                   </div>
                                 )}
-                                
+
                                 <div className="space-y-2">
                                   {day.exercises.map((ex, j) => (
                                     <div key={j} className="flex items-center justify-between p-3 bg-black rounded-xl border border-white/[0.02] hover:border-white/5 transition-all">

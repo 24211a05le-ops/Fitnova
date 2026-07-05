@@ -145,7 +145,7 @@ def chat():
 
         # 2. Fetch recent workout context
         recent_workout = Workout.query.filter_by(user_id=int(user_id)).order_by(Workout.created_at.desc()).first()
-        workout_str = f"Last Workout: {recent_workout.name} ({recent_workout.duration} mins)" if recent_workout else "No logged workouts."
+        workout_str = f"Last Workout: {recent_workout.workout_name} ({recent_workout.duration} mins)" if recent_workout else "No logged workouts."
 
         # 3. Call AI Coach
         reply = AIService.generate_fitness_chat(user_msg, history_str, workout_str)
