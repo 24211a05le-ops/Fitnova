@@ -1,0 +1,240 @@
+
+[Fitnova Diagnostics] Booting in 'development' mode
+[Neon DB] Active Database URI: postgresql+psycopg2://neondb_owner:npg_mOzuHvSi10pZ@ep-spring-paper-aofjn3vq-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+RAW_START
+{
+  "weekly_split": {
+    "Day 1": "Full Body Workout A",
+    "Day 2": "Rest",
+    "Day 3": "Full Body Workout B",
+    "Day 4": "Rest",
+    "Day 5": "Full Body Workout C",
+    "Day 6": "Rest",
+    "Day 7": "Rest"
+  },
+  "exercises": {
+    "Full Body Workout A": [
+      {
+        "name": "Barbell Bench Press",
+        "muscle": "Chest",
+        "sets": "3",
+        "reps": "8-12"
+      },
+      {
+        "name": "Close Grip Bench Press",
+        "muscle": "Arms",
+        "sets": "3",
+        "reps": "8-12"
+      },
+      {
+        "name": "Lat Pulldown",
+        "muscle": "Back",
+        "sets": "3",
+        "reps": "10-15"
+      },
+      {
+        "name": "Seated Cable Row",
+        "muscle": "Back",
+        "sets": "3",
+        "reps": "10-15"
+      },
+      {
+        "name": "Barbell Curls",
+        "muscle": "Arms",
+        "sets": "3",
+        "reps": "10-15"
+      }
+    ],
+    "Full Body Workout B": [
+      {
+        "name": "Barbell Rows",
+        "muscle": "Back",
+        "sets": "3",
+        "reps": "8-12"
+      },
+      {
+        "name": "T-Bar Row",
+        "muscle": "Back",
+        "sets": "3",
+        "reps": "8-12"
+      },
+      {
+        "name": "Dumbbell Bench Press",
+        "muscle": "Chest",
+        "sets": "3",
+        "reps": "10-15"
+      },
+      {
+        "name": "Incline Dumbbell Curl",
+        "muscle": "Arms",
+        "sets": "3",
+        "reps": "8-12"
+      },
+      {
+        "name": "Skull Crushers",
+        "muscle": "Arms",
+        "sets": "3",
+        "reps": "8-12"
+      }
+    ],
+    "Full Body Workout C": [
+      {
+        "name": "Decline Bench Press",
+        "muscle": "Chest",
+        "sets": "3",
+        "reps": "8-12"
+      },
+      {
+        "name": "Single Arm Dumbbell Row",
+        "muscle": "Back",
+        "sets": "3",
+        "reps": "8-12"
+      },
+      {
+        "name": "Wide Grip Pulldown",
+        "muscle": "Back",
+        "sets": "3",
+        "reps": "10-15"
+      },
+      {
+        "name": "Hammer Curls",
+        "muscle": "Arms",
+        "sets": "3",
+        "reps": "10-15"
+      },
+      {
+        "name": "Tricep Pushdowns",
+        "muscle": "Arms",
+        "sets": "3",
+        "reps": "10-15"
+      }
+    ]
+  },
+  "warm_up": [
+    "5 minutes light cardio (e.g., treadmill, elliptical)",
+    "Dynamic stretches for major muscle groups (e.g., arm circles, leg swings)"
+  ],
+  "cooldown": [
+    "5-10 minutes static stretching, focusing on muscles worked (e.g., chest stretch, lat stretch, tricep stretch)"
+  ],
+  "progression_strategy": "Double Progression: Aim to increase reps within the prescribed range each week. Once you hit the top end of the rep range for all sets, increase the weight slightly (e.g., 2.5-5 lbs) and start over at the lower end of the rep range. Focus on proper form over heavy weight.",
+  "cardio_plan": "Given the 45-minute workout duration limit and muscle gain goal, focus on resistance training during your workout days. On rest days, you may incorporate 20-30 minutes of low-intensity steady-state (LISS) cardio for active recovery and overall cardiovascular health, without negatively impacting muscle gain."
+}
+RAW_END
+NORMALIZED_START
+{
+  "weekly_split": {
+    "Day 1": "Full Body Workout A",
+    "Day 2": "Rest",
+    "Day 3": "Full Body Workout B",
+    "Day 4": "Rest",
+    "Day 5": "Full Body Workout C",
+    "Day 6": "Rest",
+    "Day 7": "Rest"
+  },
+  "exercises": {
+    "Day 1": [
+      {
+        "name": "Barbell Bench Press",
+        "sets": 3,
+        "reps": "8-12",
+        "rest_time": "90s"
+      },
+      {
+        "name": "Close Grip Bench Press",
+        "sets": 3,
+        "reps": "8-12",
+        "rest_time": "90s"
+      },
+      {
+        "name": "Lat Pulldown",
+        "sets": 3,
+        "reps": "10-15",
+        "rest_time": "90s"
+      },
+      {
+        "name": "Seated Cable Row",
+        "sets": 3,
+        "reps": "10-15",
+        "rest_time": "90s"
+      },
+      {
+        "name": "Barbell Curls",
+        "sets": 3,
+        "reps": "10-15",
+        "rest_time": "60s"
+      }
+    ],
+    "Day 3": [
+      {
+        "name": "Barbell Rows",
+        "sets": 3,
+        "reps": "8-12",
+        "rest_time": "90s"
+      },
+      {
+        "name": "T-Bar Row",
+        "sets": 3,
+        "reps": "8-12",
+        "rest_time": "90s"
+      },
+      {
+        "name": "Dumbbell Bench Press",
+        "sets": 3,
+        "reps": "10-15",
+        "rest_time": "90s"
+      },
+      {
+        "name": "Incline Dumbbell Curl",
+        "sets": 3,
+        "reps": "8-12",
+        "rest_time": "60s"
+      },
+      {
+        "name": "Skull Crushers",
+        "sets": 3,
+        "reps": "8-12",
+        "rest_time": "75s"
+      }
+    ],
+    "Day 5": [
+      {
+        "name": "Decline Bench Press",
+        "sets": 3,
+        "reps": "8-12",
+        "rest_time": "90s"
+      },
+      {
+        "name": "Single Arm Dumbbell Row",
+        "sets": 3,
+        "reps": "8-12",
+        "rest_time": "90s"
+      },
+      {
+        "name": "Wide Grip Pulldown",
+        "sets": 3,
+        "reps": "10-15",
+        "rest_time": "90s"
+      },
+      {
+        "name": "Hammer Curls",
+        "sets": 3,
+        "reps": "10-15",
+        "rest_time": "60s"
+      },
+      {
+        "name": "Tricep Pushdowns",
+        "sets": 3,
+        "reps": "10-15",
+        "rest_time": "75s"
+      }
+    ]
+  },
+  "warm_up": "5 minutes light cardio (e.g., treadmill, elliptical) Dynamic stretches for major muscle groups (e.g., arm circles, leg swings)",
+  "cooldown": "5-10 minutes static stretching, focusing on muscles worked (e.g., chest stretch, lat stretch, tricep stretch)",
+  "progression_strategy": "Double Progression: Aim to increase reps within the prescribed range each week. Once you hit the top end of the rep range for all sets, increase the weight slightly (e.g., 2.5-5 lbs) and start over at the lower end of the rep range. Focus on proper form over heavy weight.",
+  "cardio_plan": "Given the 45-minute workout duration limit and muscle gain goal, focus on resistance training during your workout days. On rest days, you may incorporate 20-30 minutes of low-intensity steady-state (LISS) cardio for active recovery and overall cardiovascular health, without negatively impacting muscle gain."
+}
+NORMALIZED_END
+VALID True
+MSG Success
