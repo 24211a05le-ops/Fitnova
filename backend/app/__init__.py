@@ -43,7 +43,7 @@ def create_app(config_name=None):
         "http://localhost:3000",
         "https://fitnova-fitness.vercel.app"
     ]
-    CORS(flask_app, resources={r"/api/*": {"origins": allowed_origins}}, supports_credentials=True)
+    CORS(flask_app, resources={r"/*": {"origins": allowed_origins}}, supports_credentials=True)
 
     # 3. Initialize Extensions on app
     db.init_app(flask_app)
