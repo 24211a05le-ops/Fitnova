@@ -1,0 +1,7 @@
+
+[Fitnova Diagnostics] Booting in 'development' mode
+[Neon DB] Active Database URI: postgresql+psycopg2://neondb_owner:npg_mOzuHvSi10pZ@ep-spring-paper-aofjn3vq-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+[Fitnova Seed] Existing rows: 17
+[Fitnova Seed] Missing rows to add: 53
+[Fitnova Seed] Added 53 exercises.
+[Fitnova Seed] Total rows now: 70

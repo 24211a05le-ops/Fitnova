@@ -36,7 +36,71 @@ def generate_workout():
         if not injuries:
             injuries = "None"
 
-        plan = AIService.generate_workout_plan(goal, days, equipment, level, duration, injuries)
+        # 1. Pull recent workout history and infer last muscle trained
+        from app.models.workout import Workout
+        from app.services.insight_service import InsightService
+        from app.services.ml_service import MLService
+
+        recent_workouts = Workout.query.filter_by(user_id=int(user_id)).order_by(Workout.created_at.desc()).limit(10).all()
+        
+        workout_history_str = "No recent workouts logged."
+        last_trained_muscle = "None"
+        
+        if recent_workouts:
+            catalog = InsightService.get_exercise_catalog()
+            lookup = InsightService.build_exercise_lookup(catalog)
+            last_trained_muscle = InsightService.infer_muscle_group(
+                recent_workouts[0].exercise_name,
+                recent_workouts[0].workout_name,
+                lookup
+            )
+            workout_history_str = ", ".join([f"{w.exercise_name} ({w.sets}x{w.reps})" for w in recent_workouts])
+
+        # 2. Compute Recovery Score using ML Model
+        if recent_workouts:
+            last_w = recent_workouts[0]
+            w_dur = last_w.duration or 45
+            cal_b = last_w.calories_burned or 250
+            w_int = max(1.0, min(10.0, cal_b / max(w_dur, 1) / 1.4))
+            sore = min(10.0, 2.0 + len(recent_workouts) * 1.2 + w_int * 0.3)
+            rec_data = MLService.predict_recovery_score(
+                sleep_hours=7.5,
+                workout_duration=w_dur,
+                workout_intensity=w_int,
+                muscle_soreness=sore,
+                calories_burned=cal_b
+            )
+            recovery_score = rec_data.get("recovery_score", 80)
+        else:
+            recovery_score = 80
+
+        # 3. Compute Progressive Overload Recommendation using ML Model
+        overload_rec_str = "None"
+        if recent_workouts:
+            heavy_w = max(recent_workouts, key=lambda w: (w.calories_burned or 0) / max(w.duration or 1, 1) + w.sets * 2.5)
+            prev_w = float((heavy_w.calories_burned or 0) / max(heavy_w.duration or 1, 1) + heavy_w.sets * 2.5)
+            overload_data = MLService.predict_progressive_overload(
+                prev_weight=prev_w,
+                reps_completed=heavy_w.reps or 8,
+                sets_completed=heavy_w.sets or 3
+            )
+            if overload_data.get("suggested_action") == "Increase weight":
+                overload_rec_str = f"Increase {heavy_w.exercise_name} load to {overload_data.get('recommended_weight')} kg (previously {prev_w:.1f} kg)."
+            elif overload_data.get("suggested_action") == "Increase reps":
+                overload_rec_str = f"Increase reps target for {heavy_w.exercise_name} to {overload_data.get('recommended_reps')} reps."
+
+        # 4. Generate validated plan
+        plan = AIService.generate_workout_plan(
+            goal=goal,
+            days=days,
+            equipment=equipment,
+            level=level,
+            duration=duration,
+            injuries=injuries,
+            workout_history=workout_history_str,
+            recovery_score=recovery_score,
+            overload_rec=overload_rec_str
+        )
         
         # Save to database
         db_plan = AIWorkoutPlan(

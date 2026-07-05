@@ -3,6 +3,8 @@ import json
 import time
 import requests
 from flask import current_app
+from app import db
+from app.models.exercise_embedding import ExerciseEmbedding
 
 PRIMARY_MODEL = "gemini-2.5-flash"
 SECONDARY_MODEL = "gemini-2.5-flash-lite"
@@ -12,17 +14,29 @@ FALLBACK_MODEL = "gemini-flash-lite-latest"
 _ai_cache = {}
 
 class AIService:
-    """Production-ready Google Gemini AI Orchestrator with direct REST queries, caching, and mock fallbacks."""
+    """Production-grade Google Gemini AI Coaching Orchestrator with structured modules, validation, and ML integration."""
 
     @staticmethod
     def _get_api_key():
         return os.getenv("GEMINI_API_KEY", "")
 
     @staticmethod
+    def _clean_json_text(text):
+        if not text:
+            return ""
+        text = text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        elif text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        return text.strip()
+
+    @staticmethod
     def call_model(prompt, system_instruction="You are a senior fitness and AI personal coach for Fitnova.", response_format=None, custom_model=None):
         api_key = AIService._get_api_key()
         if not api_key:
-            # Under local dev/testing without key, fallback to mock generation
             return AIService._get_mock_response(prompt, response_format)
 
         cache_key = f"{prompt}_{system_instruction}_{response_format}_{custom_model}"
@@ -36,7 +50,6 @@ class AIService:
         for model in models_to_try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
             
-            # Direct Gemini payload format
             full_prompt = prompt
             if system_instruction:
                 full_prompt = f"System Instruction: {system_instruction}\n\nUser Message: {prompt}"
@@ -51,7 +64,6 @@ class AIService:
                 ]
             }
             
-            # Force JSON response output format if requested
             if response_format and response_format.get("type") == "json_object":
                 payload["generationConfig"] = {
                     "responseMimeType": "application/json"
@@ -81,39 +93,26 @@ class AIService:
                         if not text_content:
                             raise ValueError("AI provider returned an empty response body")
                         
-                        # Cache the result
                         _ai_cache[cache_key] = text_content
                         return text_content
                     elif response.status_code in (429, 503, 500):
-                        # Rate limit or server error — try next model immediately
                         print(f"[Gemini Service] Model {model} returned status {response.status_code}, trying next model.")
                         break
                     else:
                         print(f"[Gemini Service] Model {model} returned status {response.status_code}: {response.text}")
-                        break # Try next model
+                        break
                 except Exception as e:
                     print(f"[Gemini Service] Error calling model {model} on attempt {attempt}: {str(e)}")
                     if attempt == retries - 1:
-                        break  # Move on to next model after all retries exhausted
+                        break
 
-        # If all API calls fail, fallback to mock
         return AIService._get_mock_response(prompt, response_format)
-
-    @staticmethod
-    def _track_token_usage(model, usage):
-        prompt_tokens = usage.get("prompt_tokens", 0)
-        completion_tokens = usage.get("completion_tokens", 0)
-        total_tokens = usage.get("total_tokens", 0)
-        # Deepseek/Llama free tiers currently have 0.0$ cost.
-        cost = 0.0
-        print(f"[AI Service] Model: {model} | Prompt Tokens: {prompt_tokens} | Completion Tokens: {completion_tokens} | Total: {total_tokens} | Estimated Cost: ${cost:.5f}")
 
     @staticmethod
     def _get_mock_response(prompt, response_format):
         """Standard mock fallback responses structured to match format requests"""
         prompt_lower = prompt.lower()
         
-        # If the caller requested structured JSON
         if response_format and response_format.get("type") == "json_object":
             if "workout" in prompt_lower or "split" in prompt_lower:
                 return json.dumps({
@@ -124,15 +123,25 @@ class AIService:
                     },
                     "exercises": {
                         "Monday": [
-                            {"name": "Bench Press", "sets": 4, "reps": "10 reps", "rest_time": "90s"},
-                            {"name": "Dumbbell Rows", "sets": 3, "reps": "12 reps", "rest_time": "60s"}
+                            {"name": "Barbell Bench Press", "sets": 4, "reps": "10 reps", "rest_time": "90s"},
+                            {"name": "Pull-Ups", "sets": 3, "reps": "8 reps", "rest_time": "90s"}
                         ],
                         "Wednesday": [
-                            {"name": "Squats", "sets": 4, "reps": "10 reps", "rest_time": "120s"}
+                            {"name": "Barbell Squats", "sets": 4, "reps": "10 reps", "rest_time": "120s"}
                         ],
                         "Friday": [
-                            {"name": "Push-ups", "sets": 3, "reps": "15 reps", "rest_time": "60s"}
+                            {"name": "Push-Ups", "sets": 3, "reps": "15 reps", "rest_time": "60s"}
                         ]
+                    },
+                    "warm_up": {
+                        "Monday": "5 mins arm circles, band pull-aparts, light bench press sets.",
+                        "Wednesday": "5 mins bodyweight squats, leg swings, dynamic glute bridges.",
+                        "Friday": "5 mins jumping jacks, arm swings, dynamic full-body mobility flow."
+                    },
+                    "cooldown": {
+                        "Monday": "3 mins chest doorway stretch, static overhead tricep stretch.",
+                        "Wednesday": "3 mins kneeling quad stretch, hamstring stretches.",
+                        "Friday": "3 mins child's pose, deep breathing, spine decompression."
                     },
                     "progression_strategy": "Increase weight by 2.5kg once all planned sets are completed with perfect form.",
                     "cardio_plan": "15 minutes of low-intensity steady-state cardio post-workout."
@@ -166,7 +175,6 @@ class AIService:
                     "advice": "Focus on consistency, progressive overload, and active recovery blocks for optimal progression!"
                 })
         
-        # Default: Return clean Markdown for chat bubbles
         else:
             if "workout" in prompt_lower or "split" in prompt_lower:
                 return "Here is a high-level recommendation for your workout split:\n\n* **Monday (Push)**: Focus on Chest, Shoulders, and Triceps.\n* **Wednesday (Pull)**: Focus on Back and Biceps.\n* **Friday (Legs)**: Focus on Quads, Hamstrings, and Calves.\n\nFocus on progressive overload by slowly increasing reps or load week-over-week!"
@@ -176,57 +184,197 @@ class AIService:
                 return "Welcome! As your professional fitness intelligence coach, I'm here to guide you. Focus on maintaining a consistent training split, staying hydrated, prioritizing compound lifts, and sleeping 7-8 hours for optimal progressive overload!"
 
     # ====================================================
-    # PROMPT TEMPLATES & DOMAIN CALLS
+    # VALIDATION LAYER
+    # ====================================================
+    @staticmethod
+    def validate_workout_plan(plan, duration_limit, injuries, equipment_type):
+        """
+        Validates workout plan:
+        - No duplicate exercises
+        - Total duration fits target (duration_limit)
+        - Equipment fits constraints
+        - Injuries are respected
+        """
+        if not plan or not isinstance(plan, dict):
+            return False, "Plan is not a valid JSON object."
+
+        weekly_split = plan.get("weekly_split") or {}
+        exercises_map = plan.get("exercises") or {}
+
+        if not weekly_split or not exercises_map:
+            return False, "Missing weekly_split or exercises fields."
+
+        # Verify no duplicate exercises globally or within day
+        all_exercises_names = []
+        for day, exs in exercises_map.items():
+            if not isinstance(exs, list):
+                return False, f"Exercises for day {day} is not an array."
+            
+            day_exercise_names = []
+            for ex in exs:
+                name = ex.get("name") if isinstance(ex, dict) else str(ex)
+                if not name:
+                    return False, f"Missing name field in exercise on {day}."
+                if name in day_exercise_names:
+                    return False, f"Duplicate exercise '{name}' found on {day}."
+                day_exercise_names.append(name)
+                all_exercises_names.append(name.lower())
+
+        # Check injuries conflicts (e.g. if injury is 'shoulder', no overhead press)
+        injuries_lower = str(injuries).lower()
+        if "none" not in injuries_lower:
+            unsafe_keywords = []
+            if "shoulder" in injuries_lower:
+                unsafe_keywords.extend(["shoulder press", "overhead press", "lateral raise", "face pull", "upright row"])
+            if "knee" in injuries_lower or "joint" in injuries_lower:
+                unsafe_keywords.extend(["squat", "leg press", "lunge"])
+            if "back" in injuries_lower or "spine" in injuries_lower:
+                unsafe_keywords.extend(["deadlift", "heavy barbell rows"])
+
+            for ex_name in all_exercises_names:
+                for keyword in unsafe_keywords:
+                    if keyword in ex_name:
+                        return False, f"Unsafe exercise '{ex_name}' conflicting with injury '{injuries}'."
+
+        # Check equipment access
+        equipment_lower = str(equipment_type).lower()
+        if "bodyweight" in equipment_lower:
+            for ex_name in all_exercises_names:
+                if any(w in ex_name for w in ["barbell", "dumbbell", "cable", "smith machine", "machine"]):
+                    return False, f"Exercise '{ex_name}' requires gym equipment but client is bodyweight-only."
+
+        # Estimate duration per day
+        # warmup (10 mins) + cooldown (5 mins) + exercises (sets * rest_time + sets * 1.5 mins)
+        for day, exs in exercises_map.items():
+            est_dur = 15 # Warm-up + Cooldown base
+            for ex in exs:
+                sets = int(ex.get("sets", 3))
+                # extract rest time numeric part
+                rest_str = str(ex.get("rest_time", "60s"))
+                rest_val = 60
+                if "90" in rest_str:
+                    rest_val = 90
+                elif "120" in rest_str:
+                    rest_val = 120
+                
+                # sets * (rest + 60s performance time)
+                est_dur += int((sets * (rest_val + 60)) / 60)
+            
+            if est_dur > duration_limit + 10: # allow 10min threshold
+                return False, f"Day {day} estimated duration ({est_dur} mins) exceeds session limit ({duration_limit} mins)."
+
+        return True, "Success"
+
+    # ====================================================
+    # SPECIALIZED AI MODULES & PROMPTS
     # ====================================================
 
-    @staticmethod
-    def _clean_json_text(text):
-        if not text:
-            return ""
-        text = text.strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        elif text.startswith("```"):
-            text = text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-        return text.strip()
-
     @classmethod
-    def generate_workout_plan(cls, goal, days, equipment, level, duration, injuries):
-        prompt = f"""
-        Generate a highly personalized weekly workout plan. The exercises must perfectly align with the daily focus specified in the weekly split, the user's available equipment, difficulty level, and must respect any injuries or limitations.
-        
-        Profile:
-        - Fitness Goal: {goal}
-        - Available Workout Days: {days} days/week
-        - Equipment Access: {equipment}
-        - Difficulty Level: {level}
-        - Workout Duration: {duration} minutes
-        - Injuries/Limitations: {injuries}
-
-        Return a strictly formatted JSON object with keys:
-        - weekly_split: An object mapping day names (e.g., "Monday", "Wednesday", "Friday") to their target muscle group or focus (e.g., "Chest and Triceps", "Back and Biceps", "Legs and Core").
-        - exercises: An object mapping the exact same day names from weekly_split (e.g., "Monday", "Wednesday", "Friday") to an array of exercise objects. Each exercise object must have:
-          - name: The exercise name (must be a real exercise matching the day's focus, available equipment, and avoiding injuries).
-          - sets: Number of sets (integer).
-          - reps: Reps or duration (string, e.g., "8-10 reps" or "30s").
-          - rest_time: Rest duration (string, e.g., "90s").
-        - progression_strategy: String explaining how the user should progress over weeks.
-        - cardio_plan: String recommending cardio integration.
-
-        Ensure that the exercises list for each day contains proper and realistic exercises that match that day's focus and the user's equipment.
-        Do not include markdown wrappers around the JSON outside the standard JSON structure.
+    def generate_workout_plan(cls, goal, days, equipment, level, duration, injuries, workout_history=None, recovery_score=100, overload_rec=None):
         """
-        response_text = cls.call_model(prompt, response_format={"type": "json_object"})
-        try:
-            return json.loads(cls._clean_json_text(response_text))
-        except Exception:
-            return json.loads(cls._get_mock_response("workout", {"type": "json_object"}))
+        Specialized Workout Generator Module.
+        Applies certified trainer instructions and validates output automatically.
+        """
+        # Fetch actual exercise database to enforce selection
+        db_exercises = ExerciseEmbedding.query.all()
+        exercise_list_str = "\n".join([
+            f"- {e.exercise_name} (Muscle: {e.muscle_group}, Difficulty: {e.difficulty}, Equipment: {e.equipment})"
+            for e in db_exercises
+        ]) if db_exercises else "Use standard gym exercises suitable for user's level."
+
+        system_instruction = (
+            "You are a professional Strength and Conditioning Coach. You write precise, scientific workout splits. "
+            "You must select exercises ONLY from the following exercise database:\n"
+            f"{exercise_list_str}\n\n"
+            "Rules:\n"
+            "1. Prioritize multi-joint compound exercises at the beginning of each day's list.\n"
+            "2. Never train the exact same muscle group twice within 48 hours.\n"
+            "3. Beginner level must avoid advanced lifts (e.g. Deadlifts, Hanging Leg Raises). Intermediate/Advanced should include progressive overload.\n"
+            "4. Strictly respect injuries. Avoid movements loaded on injured body parts.\n"
+            "5. The exercises must fit within the target session duration.\n"
+            "6. Modify workout difficulty according to the user's recovery score: if score < 50, scale down sets and volume; if score >= 80, scale up intensity."
+        )
+
+        validation_feedback = ""
+        for attempt in range(3):
+            prompt = f"""
+            Generate a personalized workout split:
+            - Goal: {goal}
+            - Days: {days} days/week
+            - Equipment Access: {equipment}
+            - Difficulty Level: {level}
+            - Workout Duration Limit: {duration} minutes
+            - Injuries: {injuries}
+            - Current Recovery Score: {recovery_score}/100
+            - Progressive Overload Recommendation: {overload_rec or "None"}
+            - Workout History Context: {workout_history or "None"}
+
+            {f"Previous Validation Error (FIX THIS): {validation_feedback}" if validation_feedback else ""}
+
+            Return a strictly formatted JSON object with keys:
+            - weekly_split: An object mapping day names (e.g., "Monday", "Wednesday", "Friday") to their target focus (e.g., "Chest and Triceps").
+            - exercises: An object mapping the exact same day names to an array of exercise objects. Each exercise object must have:
+              - name: Exercise name (must exactly match one from the database list above).
+              - sets: Number of sets (integer).
+              - reps: Reps or duration (string, e.g., "8-10 reps").
+              - rest_time: Rest duration (string, e.g., "90s").
+            - warm_up: An object mapping the same day names to a string description of dynamic warm-up exercises.
+            - cooldown: An object mapping the same day names to a string description of static cooldown stretches.
+            - progression_strategy: String progression plan (incorporate the overload recommendation).
+            - cardio_plan: String recommending cardio integration.
+
+            Do not include markdown wrappers around the JSON outside the standard JSON structure.
+            """
+            
+            response_text = cls.call_model(prompt, system_instruction=system_instruction, response_format={"type": "json_object"})
+            try:
+                plan_json = json.loads(cls._clean_json_text(response_text))
+                is_valid, err_msg = cls.validate_workout_plan(plan_json, duration, injuries, equipment)
+                if is_valid:
+                    return plan_json
+                else:
+                    validation_feedback = err_msg
+                    print(f"[Workout Generator] Validation failed (Attempt {attempt+1}): {err_msg}")
+            except Exception as e:
+                validation_feedback = f"JSON Parse error: {str(e)}"
+                print(f"[Workout Generator] Parse error (Attempt {attempt+1}): {str(e)}")
+
+        # Final fallback to mock if validation fails repeatedly
+        return json.loads(cls._get_mock_response("workout", {"type": "json_object"}))
 
     @classmethod
     def generate_fitness_chat(cls, user_message, chat_history_context=None, recent_workout_context=None):
-        system_instruction = "You are a professional fitness coach. Respond in a highly direct, simple, and accurate manner. Keep your response extremely to the point, short (maximum 2-3 brief paragraphs or short bullet points), and avoid lengthy explanations."
+        """
+        Specialized Fitness Chat router. Directs user questions to specific sub-modules:
+        - ExerciseExplainer (if asking how to do an exercise)
+        - MotivationCoach (if asking for encouragement/mindset)
+        - RecoveryCoach (if asking about fatigue/soreness)
+        - FitnessChat (general fitness advice)
+        """
+        user_msg_lower = user_message.lower()
+        
+        # 1. Routing to appropriate prompt
+        if any(w in user_msg_lower for w in ["explain", "how to", "form", "mistake", "video", "execute"]):
+            system_instruction = (
+                "You are an Exercise Explainer Specialist. Explain exercise mechanics, target muscles, common mistakes, "
+                "and correct form. Be highly technical, safe, and professional. Avoid generic conversational fluff."
+            )
+        elif any(w in user_msg_lower for w in ["unmotivated", "lazy", "tired", "give up", "motivation", "mindset", "focus"]):
+            system_instruction = (
+                "You are a sports psychology and motivation coach. Provide professional, direct, non-fluffy mental coaching. "
+                "Focus on consistency, discipline over motivation, and aligning actions with long-term fitness goals."
+            )
+        elif any(w in user_msg_lower for w in ["sore", "pain", "hurt", "recover", "sleep", "rest", "fatigue"]):
+            system_instruction = (
+                "You are a recovery specialist. Provide scientific recommendations for fatigue management, active recovery, "
+                "hydration, sleep hygiene, and mobility splits. Give direct action points based on metrics."
+            )
+        else:
+            system_instruction = (
+                "You are an elite, professional fitness coach. Speak professionally and direct. "
+                "Always base suggestions on the user's history and data context. Avoid generic 'ChatGPT-like' friendly chatter."
+            )
+
         context_prompt = ""
         if chat_history_context:
             context_prompt += f"Recent Chat context:\n{chat_history_context}\n"
@@ -238,6 +386,7 @@ class AIService:
 
     @classmethod
     def generate_recovery_advice(cls, last_workout, soreness, sleep, calories, intensity):
+        """Delegates to the RecoveryCoach module prompt."""
         prompt = f"""
         Analyze these daily recovery metrics:
         - Last Workout Muscle Group: {last_workout}
@@ -252,7 +401,11 @@ class AIService:
         - hydration_suggestions (string)
         - rest_recommendation (string)
         """
-        response_text = cls.call_model(prompt, response_format={"type": "json_object"})
+        system_instruction = (
+            "You are a recovery coach. Provide professional recovery coaching based on physiological metrics. "
+            "Suggest optimal sleep extension targets, dynamic release schemes, and nutrition adjustments."
+        )
+        response_text = cls.call_model(prompt, system_instruction=system_instruction, response_format={"type": "json_object"})
         try:
             return json.loads(cls._clean_json_text(response_text))
         except Exception:
@@ -271,7 +424,8 @@ class AIService:
         - beginner_intermediate_classification (string)
         - estimated_maintenance_calories (integer)
         """
-        response_text = cls.call_model(prompt, response_format={"type": "json_object"}, custom_model=SECONDARY_MODEL)
+        system_instruction = "You are a senior fitness assessor. Analyze physical specs and determine starting difficulty and maintenance calories."
+        response_text = cls.call_model(prompt, system_instruction=system_instruction, response_format={"type": "json_object"}, custom_model=SECONDARY_MODEL)
         try:
             return json.loads(cls._clean_json_text(response_text))
         except Exception:
@@ -279,6 +433,7 @@ class AIService:
 
     @classmethod
     def generate_meal_plan(cls, calories, diet_type, budget, meals_per_day, allergies, indian_preference):
+        """Delegates to the MealPlanner module prompt."""
         prompt = f"""
         Design a premium, highly accurate and personalized diet plan:
         - Calorie Target: {calories} kcal
@@ -302,7 +457,8 @@ class AIService:
         Ensure all meal suggestions strictly adhere to the calorie target of {calories} kcal and macros are mathematically consistent with it (1g protein = 4 kcal, 1g carb = 4 kcal, 1g fat = 9 kcal).
         Do not include markdown wrappers around the JSON outside the standard JSON structure.
         """
-        response_text = cls.call_model(prompt, response_format={"type": "json_object"})
+        system_instruction = "You are a professional sports nutritionist. Write precise, balanced meal plans aligned with diet restrictions."
+        response_text = cls.call_model(prompt, system_instruction=system_instruction, response_format={"type": "json_object"})
         try:
             return json.loads(cls._clean_json_text(response_text))
         except Exception:
