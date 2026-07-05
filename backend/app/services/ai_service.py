@@ -34,6 +34,88 @@ class AIService:
         return text.strip()
 
     @staticmethod
+    def _goal_muscle_groups(goal):
+        goal_lower = str(goal or "").lower()
+        if any(keyword in goal_lower for keyword in ["muscle", "gain", "hypertrophy", "bulk"]):
+            return ["Chest", "Back", "Legs", "Shoulders", "Arms", "Core"]
+        if any(keyword in goal_lower for keyword in ["strength", "power"]):
+            return ["Chest", "Back", "Legs", "Shoulders", "Arms", "Core"]
+        if any(keyword in goal_lower for keyword in ["fat loss", "weight loss", "cut", "lose"]):
+            return ["Chest", "Back", "Legs", "Shoulders", "Arms", "Core"]
+        return ["Chest", "Back", "Legs", "Shoulders", "Arms", "Core"]
+
+    @staticmethod
+    def _exercise_matches_equipment(exercise, equipment):
+        equipment_lower = str(equipment or "").lower()
+        exercise_equipment = str(exercise.equipment or "").lower()
+        if any(keyword in equipment_lower for keyword in ["bodyweight", "home"]):
+            return exercise_equipment in {"home", "bodyweight"}
+        if "dumbbell" in equipment_lower and exercise_equipment == "gym":
+            return True
+        if "gym" in equipment_lower or "full" in equipment_lower:
+            return True
+        return equipment_lower in exercise_equipment
+
+    @staticmethod
+    def _exercise_matches_injuries(exercise, injuries):
+        injuries_lower = str(injuries or "").lower()
+        if not injuries_lower or "none" in injuries_lower:
+            return True
+
+        text = f"{exercise.exercise_name} {exercise.muscle_group} {exercise.tags}".lower()
+        unsafe_map = {
+            "shoulder": ["shoulder press", "overhead press", "lateral raise", "upright row", "face pull"],
+            "knee": ["squat", "leg press", "lunge", "step up", "split squat", "hack squat"],
+            "joint": ["squat", "leg press", "lunge", "deadlift"],
+            "back": ["deadlift", "barbell row", "t-bar row", "row", "good morning"],
+            "spine": ["deadlift", "barbell row", "t-bar row", "row", "good morning"],
+        }
+
+        for injury_key, unsafe_keywords in unsafe_map.items():
+            if injury_key in injuries_lower:
+                if any(keyword in text for keyword in unsafe_keywords):
+                    return False
+
+        return True
+
+    @staticmethod
+    def _build_candidate_exercises(goal, equipment, injuries, days):
+        all_exercises = ExerciseEmbedding.query.order_by(
+            ExerciseEmbedding.muscle_group.asc(),
+            ExerciseEmbedding.exercise_name.asc(),
+        ).all()
+
+        goal_groups = set(AIService._goal_muscle_groups(goal))
+        days_int = max(int(days or 3), 1)
+        max_candidates = max(18, days_int * 10)
+
+        filtered = [
+            exercise for exercise in all_exercises
+            if exercise.muscle_group in goal_groups
+            and AIService._exercise_matches_equipment(exercise, equipment)
+            and AIService._exercise_matches_injuries(exercise, injuries)
+        ]
+
+        if not filtered:
+            filtered = [
+                exercise for exercise in all_exercises
+                if AIService._exercise_matches_equipment(exercise, equipment)
+                and AIService._exercise_matches_injuries(exercise, injuries)
+            ]
+
+        if not filtered:
+            filtered = all_exercises
+
+        return filtered[:max_candidates]
+
+    @staticmethod
+    def _format_candidate_exercises(exercises):
+        return "\n".join(
+            f"- {exercise.exercise_name} (Muscle: {exercise.muscle_group}, Difficulty: {exercise.difficulty}, Equipment: {exercise.equipment})"
+            for exercise in exercises
+        )
+
+    @staticmethod
     def call_model(prompt, system_instruction="You are a senior fitness and AI personal coach for Fitnova.", response_format=None, custom_model=None):
         api_key = AIService._get_api_key()
         if not api_key:
@@ -275,16 +357,13 @@ class AIService:
         Specialized Workout Generator Module.
         Applies certified trainer instructions and validates output automatically.
         """
-        # Fetch actual exercise database to enforce selection
-        db_exercises = ExerciseEmbedding.query.all()
-        exercise_list_str = "\n".join([
-            f"- {e.exercise_name} (Muscle: {e.muscle_group}, Difficulty: {e.difficulty}, Equipment: {e.equipment})"
-            for e in db_exercises
-        ]) if db_exercises else "Use standard gym exercises suitable for user's level."
+        # Build candidate exercises from the database before handing them to Gemini.
+        candidate_exercises = cls._build_candidate_exercises(goal, equipment, injuries, days)
+        exercise_list_str = cls._format_candidate_exercises(candidate_exercises) if candidate_exercises else "Use standard gym exercises suitable for user's level."
 
         system_instruction = (
             "You are a professional Strength and Conditioning Coach. You write precise, scientific workout splits. "
-            "You must select exercises ONLY from the following exercise database:\n"
+            "You must select exercises ONLY from the following candidate exercises filtered from the exercise database:\n"
             f"{exercise_list_str}\n\n"
             "Rules:\n"
             "1. Prioritize multi-joint compound exercises at the beginning of each day's list.\n"
