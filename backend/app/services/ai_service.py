@@ -116,6 +116,88 @@ class AIService:
         )
 
     @staticmethod
+    def _default_rest_time(exercise_name):
+        name_lower = str(exercise_name or "").lower()
+        heavy_compounds = [
+            "bench press", "squat", "deadlift", "row", "press", "pulldown",
+            "leg press", "hip thrust", "front squat", "hack squat", "close grip bench press",
+        ]
+        isolations = ["curl", "raise", "fly", "extension", "crunch", "push-up", "pushups", "dips"]
+
+        if any(keyword in name_lower for keyword in heavy_compounds):
+            return "90s"
+        if any(keyword in name_lower for keyword in isolations):
+            return "60s"
+        return "75s"
+
+    @staticmethod
+    def _normalize_workout_plan(plan):
+        if not isinstance(plan, dict):
+            return plan
+
+        weekly_split = plan.get("weekly_split") or {}
+        exercises_map = plan.get("exercises") or {}
+
+        if not weekly_split or not exercises_map:
+            return plan
+
+        normalized_plan = dict(plan)
+        normalized_exercises = {}
+
+        if all(day in exercises_map for day in weekly_split.keys()):
+            source_items = exercises_map.items()
+        else:
+            training_days = [day for day, focus in weekly_split.items() if str(focus).strip().lower() != "rest"]
+            source_items = zip(training_days, exercises_map.values())
+
+        for day, exercises in source_items:
+            if not isinstance(exercises, list):
+                continue
+
+            normalized_day_exercises = []
+            for exercise in exercises:
+                if not isinstance(exercise, dict):
+                    continue
+
+                exercise_name = exercise.get("name") or exercise.get("exercise") or exercise.get("exercise_name")
+                if not exercise_name:
+                    continue
+
+                sets_value = exercise.get("sets", 3)
+                try:
+                    sets_value = int(sets_value)
+                except (TypeError, ValueError):
+                    sets_value = 3
+
+                reps_value = exercise.get("reps") or exercise.get("rep_range") or exercise.get("duration") or "8-12 reps"
+                rest_value = exercise.get("rest_time") or exercise.get("rest") or exercise.get("restTime") or AIService._default_rest_time(exercise_name)
+
+                normalized_day_exercises.append(
+                    {
+                        "name": exercise_name,
+                        "sets": sets_value,
+                        "reps": str(reps_value),
+                        "rest_time": str(rest_value),
+                    }
+                )
+
+            if normalized_day_exercises:
+                normalized_exercises[day] = normalized_day_exercises
+
+        if normalized_exercises:
+            normalized_plan["exercises"] = normalized_exercises
+
+        warm_up = normalized_plan.get("warm_up")
+        if isinstance(warm_up, list):
+            normalized_plan["warm_up"] = " ".join(str(item) for item in warm_up if item)
+
+        cooldown = normalized_plan.get("cooldown")
+        if isinstance(cooldown, list):
+            normalized_plan["cooldown"] = " ".join(str(item) for item in cooldown if item)
+
+        return normalized_plan
+
+    @staticmethod
     def call_model(prompt, system_instruction="You are a senior fitness and AI personal coach for Fitnova.", response_format=None, custom_model=None):
         api_key = AIService._get_api_key()
         if not api_key:
@@ -408,6 +490,7 @@ class AIService:
             response_text = cls.call_model(prompt, system_instruction=system_instruction, response_format={"type": "json_object"})
             try:
                 plan_json = json.loads(cls._clean_json_text(response_text))
+                plan_json = cls._normalize_workout_plan(plan_json)
                 is_valid, err_msg = cls.validate_workout_plan(plan_json, duration, injuries, equipment)
                 if is_valid:
                     return plan_json
