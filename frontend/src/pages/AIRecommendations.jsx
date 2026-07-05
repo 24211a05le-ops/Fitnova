@@ -82,7 +82,36 @@ const AIRecommendations = () => {
           const split = planSource.weekly_split || {};
           let planDays = [];
 
-          if (Array.isArray(planSource.exercises)) {
+          if (planSource.exercises && !Array.isArray(planSource.exercises)) {
+            const exMap = planSource.exercises || {};
+            const setsMap = planSource.sets || {};
+            const repsMap = planSource.reps || {};
+            const restMap = planSource.rest_time || {};
+
+            Object.keys(split).forEach(dayKey => {
+              const dayFocus = split[dayKey];
+              const dayExs = exMap[dayKey] || [];
+              const dayExercises = dayExs.map(ex => {
+                if (typeof ex === 'object' && ex !== null) {
+                  return {
+                    name: ex.name || ex.exercise_name || "Exercise",
+                    sets: ex.sets || 3,
+                    reps: ex.reps || 10,
+                    rest: ex.rest_time || ex.rest || "60s"
+                  };
+                } else {
+                  const exName = String(ex);
+                  return {
+                    name: exName,
+                    sets: setsMap[exName] || 3,
+                    reps: repsMap[exName] || 10,
+                    rest: restMap[exName] || "60s"
+                  };
+                }
+              });
+              planDays.push({ day: dayKey, focus: dayFocus, exercises: dayExercises });
+            });
+          } else if (Array.isArray(planSource.exercises)) {
             const exercises = planSource.exercises;
             const dayKeys = Object.keys(split);
             dayKeys.forEach((dayKey, idx) => {
@@ -95,23 +124,6 @@ const AIRecommendations = () => {
                 sets: ex.sets || 3,
                 reps: ex.reps || 10,
                 rest: ex.rest_time || ex.rest || "60s"
-              }));
-              planDays.push({ day: dayKey, focus: dayFocus, exercises: dayExercises });
-            });
-          } else {
-            const exMap = planSource.exercises || {};
-            const setsMap = planSource.sets || {};
-            const repsMap = planSource.reps || {};
-            const restMap = planSource.rest_time || {};
-
-            Object.keys(split).forEach(dayKey => {
-              const dayFocus = split[dayKey];
-              const dayExNames = exMap[dayKey] || [];
-              const dayExercises = dayExNames.map(exName => ({
-                name: exName,
-                sets: setsMap[exName] || 3,
-                reps: repsMap[exName] || 10,
-                rest: restMap[exName] || "60s"
               }));
               planDays.push({ day: dayKey, focus: dayFocus, exercises: dayExercises });
             });
@@ -152,8 +164,43 @@ const AIRecommendations = () => {
       const split = planSource.weekly_split || {};
       let planDays = [];
 
-      // 1. If exercises is a flat array of objects (our modern backend structure!)
-      if (Array.isArray(planSource.exercises)) {
+      // 1. If exercises is an object (day mapped to array of exercise objects)
+      if (planSource.exercises && !Array.isArray(planSource.exercises)) {
+        const exMap = planSource.exercises || {};
+        const setsMap = planSource.sets || {};
+        const repsMap = planSource.reps || {};
+        const restMap = planSource.rest_time || {};
+
+        Object.keys(split).forEach(dayKey => {
+          const dayFocus = split[dayKey];
+          const dayExs = exMap[dayKey] || [];
+          const dayExercises = dayExs.map(ex => {
+            if (typeof ex === 'object' && ex !== null) {
+              return {
+                name: ex.name || ex.exercise_name || "Exercise",
+                sets: ex.sets || 3,
+                reps: ex.reps || 10,
+                rest: ex.rest_time || ex.rest || "60s"
+              };
+            } else {
+              const exName = String(ex);
+              return {
+                name: exName,
+                sets: setsMap[exName] || 3,
+                reps: repsMap[exName] || 10,
+                rest: restMap[exName] || "60s"
+              };
+            }
+          });
+          planDays.push({
+            day: dayKey,
+            focus: dayFocus,
+            exercises: dayExercises
+          });
+        });
+      } 
+      // 2. If exercises is a flat array of objects (legacy chunked fallback)
+      else if (Array.isArray(planSource.exercises)) {
         const exercises = planSource.exercises;
         const dayKeys = Object.keys(split);
         
@@ -170,29 +217,6 @@ const AIRecommendations = () => {
             rest: ex.rest_time || ex.rest || "60s"
           }));
 
-          planDays.push({
-            day: dayKey,
-            focus: dayFocus,
-            exercises: dayExercises
-          });
-        });
-      } 
-      // 2. Legacy structure: mappings of maps
-      else {
-        const exMap = planSource.exercises || {};
-        const setsMap = planSource.sets || {};
-        const repsMap = planSource.reps || {};
-        const restMap = planSource.rest_time || {};
-
-        Object.keys(split).forEach(dayKey => {
-          const dayFocus = split[dayKey];
-          const dayExNames = exMap[dayKey] || [];
-          const dayExercises = dayExNames.map(exName => ({
-            name: exName,
-            sets: setsMap[exName] || 3,
-            reps: repsMap[exName] || 10,
-            rest: restMap[exName] || "60s"
-          }));
           planDays.push({
             day: dayKey,
             focus: dayFocus,
