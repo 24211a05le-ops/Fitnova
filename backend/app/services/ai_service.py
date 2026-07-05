@@ -122,11 +122,18 @@ class AIService:
                         "Wednesday": "Lower Body Strength",
                         "Friday": "Full Body Conditioning"
                     },
-                    "exercises": [
-                        {"name": "Bench Press", "sets": 4, "reps": 10, "rest_time": "90s"},
-                        {"name": "Squats", "sets": 4, "reps": 10, "rest_time": "120s"},
-                        {"name": "Dumbbell Rows", "sets": 3, "reps": 12, "rest_time": "60s"}
-                    ],
+                    "exercises": {
+                        "Monday": [
+                            {"name": "Bench Press", "sets": 4, "reps": "10 reps", "rest_time": "90s"},
+                            {"name": "Dumbbell Rows", "sets": 3, "reps": "12 reps", "rest_time": "60s"}
+                        ],
+                        "Wednesday": [
+                            {"name": "Squats", "sets": 4, "reps": "10 reps", "rest_time": "120s"}
+                        ],
+                        "Friday": [
+                            {"name": "Push-ups", "sets": 3, "reps": "15 reps", "rest_time": "60s"}
+                        ]
+                    },
                     "progression_strategy": "Increase weight by 2.5kg once all planned sets are completed with perfect form.",
                     "cardio_plan": "15 minutes of low-intensity steady-state cardio post-workout."
                 })
@@ -188,7 +195,9 @@ class AIService:
     @classmethod
     def generate_workout_plan(cls, goal, days, equipment, level, duration, injuries):
         prompt = f"""
-        Generate a highly personalized workout plan with this profile:
+        Generate a highly personalized weekly workout plan. The exercises must perfectly align with the daily focus specified in the weekly split, the user's available equipment, difficulty level, and must respect any injuries or limitations.
+        
+        Profile:
         - Fitness Goal: {goal}
         - Available Workout Days: {days} days/week
         - Equipment Access: {equipment}
@@ -197,11 +206,16 @@ class AIService:
         - Injuries/Limitations: {injuries}
 
         Return a strictly formatted JSON object with keys:
-        - weekly_split (object showing days and focuses)
-        - exercises (array of objects containing name, sets, reps, rest_time)
-        - progression_strategy (string)
-        - cardio_plan (string)
+        - weekly_split: An object mapping day names (e.g., "Monday", "Wednesday", "Friday") to their target muscle group or focus (e.g., "Chest and Triceps", "Back and Biceps", "Legs and Core").
+        - exercises: An object mapping the exact same day names from weekly_split (e.g., "Monday", "Wednesday", "Friday") to an array of exercise objects. Each exercise object must have:
+          - name: The exercise name (must be a real exercise matching the day's focus, available equipment, and avoiding injuries).
+          - sets: Number of sets (integer).
+          - reps: Reps or duration (string, e.g., "8-10 reps" or "30s").
+          - rest_time: Rest duration (string, e.g., "90s").
+        - progression_strategy: String explaining how the user should progress over weeks.
+        - cardio_plan: String recommending cardio integration.
 
+        Ensure that the exercises list for each day contains proper and realistic exercises that match that day's focus and the user's equipment.
         Do not include markdown wrappers around the JSON outside the standard JSON structure.
         """
         response_text = cls.call_model(prompt, response_format={"type": "json_object"})
@@ -266,21 +280,27 @@ class AIService:
     @classmethod
     def generate_meal_plan(cls, calories, diet_type, budget, meals_per_day, allergies, indian_preference):
         prompt = f"""
-        Design a premium diet planner:
+        Design a premium, highly accurate and personalized diet plan:
         - Calorie Target: {calories} kcal
-        - Vegetarian/Non-Veg: {diet_type}
+        - Vegetarian/Non-Veg: {diet_type} (Strictly respect this. If Vegetarian, DO NOT include any meat, fish, or eggs. If Non-Veg, include healthy meat/fish/egg options if appropriate).
         - Budget preference: {budget}
-        - Meals per day: {meals_per_day}
-        - Allergies: {allergies}
-        - Indian Food Preference: {'Yes' if indian_preference else 'No'}
+        - Meals per day: {meals_per_day} meals
+        - Allergies/Avoid: {allergies} (Strictly exclude any ingredients containing these).
+        - Indian Food Preference: {'Yes' if indian_preference else 'No'} (If Yes, suggest healthy Indian meals, e.g., paneer, dal, roti, brown rice, etc. If No, suggest western or global recipes).
 
         Return a strictly formatted JSON object with keys:
-        - breakfast (string)
-        - lunch (string)
-        - dinner (string)
-        - snacks (string)
-        - macros (object containing proteins, carbs, fats)
-        - meal_timing (string)
+        - breakfast: String describing the breakfast meal, including ingredients and portion sizes to hit target.
+        - lunch: String describing the lunch meal, including ingredients and portion sizes.
+        - dinner: String describing the dinner meal, including ingredients and portion sizes.
+        - snacks: String describing snack(s) for the day, matching the meal count preference.
+        - macros: An object containing:
+          - proteins: String (e.g., "150g")
+          - carbs: String (e.g., "220g")
+          - fats: String (e.g., "70g")
+        - meal_timing: String explaining when to eat each meal for optimal recovery and energy.
+
+        Ensure all meal suggestions strictly adhere to the calorie target of {calories} kcal and macros are mathematically consistent with it (1g protein = 4 kcal, 1g carb = 4 kcal, 1g fat = 9 kcal).
+        Do not include markdown wrappers around the JSON outside the standard JSON structure.
         """
         response_text = cls.call_model(prompt, response_format={"type": "json_object"})
         try:

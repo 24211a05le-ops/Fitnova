@@ -15,14 +15,26 @@ from app.utils.responses import api_response, error_response
 def generate_workout():
     try:
         user_id = get_jwt_identity()
+        user = User.query.get(user_id)
         data = request.get_json() or {}
         
-        goal = data.get("fitness_goal", "Muscle Gain")
-        days = int(data.get("workout_days", 3))
-        equipment = data.get("available_equipment", "Full Gym")
-        level = data.get("difficulty_level", "Intermediate")
+        goal = data.get("fitness_goal") or (user.fitness_goal if user else "Muscle Gain")
+        
+        days = data.get("workout_days")
+        if days is not None:
+            days = int(days)
+        else:
+            days = int(user.fitness_profile.available_days if user and user.fitness_profile and user.fitness_profile.available_days else 3)
+            
+        equipment = data.get("available_equipment") or (user.fitness_profile.equipment_access if user and user.fitness_profile else "Full Gym")
+        level = data.get("difficulty_level") or (user.fitness_profile.experience_level if user and user.fitness_profile else "Intermediate")
         duration = int(data.get("workout_duration", 45))
-        injuries = data.get("injuries_limitations", "None")
+        
+        injuries = data.get("injuries_limitations")
+        if (not injuries or injuries == "None") and user and user.fitness_profile:
+            injuries = user.fitness_profile.injuries or "None"
+        if not injuries:
+            injuries = "None"
 
         plan = AIService.generate_workout_plan(goal, days, equipment, level, duration, injuries)
         
